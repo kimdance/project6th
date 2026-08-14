@@ -55,14 +55,25 @@ public class UserService {
             errorItems.add(new ErrorItem(msg, List.of("telnumber")));
         }
 
-        // 4. メールアドレス重複チェック
-        if (userRepository.existsByEmail(user.getEmail())) {
-            String duplicateMsg = messageSource.getMessage(
-                "user.register.error.duplicate-email",
+        // 4. 会社コード必須チェック
+        if (user.getCompanyCode() == null || user.getCompanyCode().isBlank()) {
+            String msg = messageSource.getMessage(
+                "user.register.error.company-code-required",
                 null,
                 LocaleContextHolder.getLocale()
             );
-            errorItems.add(new ErrorItem(duplicateMsg, List.of("email")));
+            errorItems.add(new ErrorItem(msg, List.of("companyCode")));
+        }
+
+        // 5. 会社コードとメールアドレスの組み合わせ重複チェック
+        if (user.getCompanyCode() != null && !user.getCompanyCode().isBlank()
+                && userRepository.existsByCompanyCodeAndEmail(user.getCompanyCode(), user.getEmail())) {
+            String duplicateMsg = messageSource.getMessage(
+                "user.register.error.duplicate-company-email",
+                null,
+                LocaleContextHolder.getLocale()
+            );
+            errorItems.add(new ErrorItem(duplicateMsg, List.of("companyCode", "email")));
         }
 
         // ★ エラーが1件以上蓄積されていればスロー

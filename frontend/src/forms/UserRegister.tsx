@@ -16,6 +16,7 @@ export const UserRegister: React.FC = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
+    companyCode: '',
     name: '',
     email: '',
     password: '',
@@ -97,6 +98,18 @@ export const UserRegister: React.FC = () => {
       <TopMessage messages={messages} isError={true} />
 
       <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '15px' }}>
+          <label>会社コード:</label>
+          <input
+            type="text"
+            name="companyCode"
+            value={formData.companyCode}
+            onChange={handleChange}
+            required
+            style={getInputStyle('companyCode')}
+          />
+        </div>
+
         <div style={{ marginBottom: '15px' }}>
           <label>お名前:</label>
           <input
