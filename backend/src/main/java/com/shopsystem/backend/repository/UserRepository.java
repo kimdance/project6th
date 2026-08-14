@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
     
-    // メールアドレスの存在チェック用メソッド（Spring Data JPAが自動生成）
-    boolean existsByEmail(String email);
+    // 会社コードとメールアドレスの組み合わせの存在チェック用メソッド（Spring Data JPAが自動生成）
+    boolean existsByCompanyCodeAndEmail(String companyCode, String email);
 }
