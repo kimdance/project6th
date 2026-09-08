@@ -220,6 +220,8 @@ CREATE TABLE menu_item (
     company_code     VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id         BIGINT NOT NULL REFERENCES store(id),
     category_id      BIGINT NOT NULL REFERENCES menu_category(id),
+    prep_type        VARCHAR(20) NOT NULL DEFAULT 'COOK'
+        CHECK (prep_type IN ('COOK','NO_COOK')), -- 調理要否。NO_COOK（ドリンク等）は調理 KDS / kitchen_ticket の対象外（§9）
     name             VARCHAR(255) NOT NULL,
     description      TEXT,
     price_jpy        INTEGER NOT NULL,
@@ -416,6 +418,10 @@ CREATE TABLE order_line (
     note                   VARCHAR(500),
     serve_status           VARCHAR(20) NOT NULL DEFAULT 'PENDING'
         CHECK (serve_status IN ('PENDING','PREPARING','SERVED','CANCELLED','REJECTED')),
+    fire_state             VARCHAR(20) NOT NULL DEFAULT 'FIRED'
+        CHECK (fire_state IN ('HELD','FIRED')), -- HELD=後出し保留（調理KDS非表示）。ホールの fire で FIRED。NO_COOK は常に FIRED 扱い（§9）
+    fired_at               TIMESTAMPTZ,   -- HELD→FIRED にした時刻。HELD を経た明細は KDS のソート・滞留をこれで測る（§9）
+    fired_by               VARCHAR(255),  -- fire 操作者
     registered_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     registered_by          VARCHAR(255) NOT NULL,
     business_date          DATE NOT NULL, -- 注文された営業日。登録時に registered_at（オフラインは補正後）＋店舗の営業日境界から算出（§9）
@@ -920,6 +926,20 @@ public interface PaymentGateway {
   `serve_status = PENDING` のオフライン明細は従来どおり `kitchen_ticket` を発行し KDS に表示する（表示順は
   `registered_at` 基準）。サーバの操作は INSERT 1回のみで既存行 UPDATE は発生しないため、「オフラインは
   新規追加のみ・既存行の更新は不可」と矛盾しない。
+  - **用語の整理（`serve_status` と `kitchen_ticket.status` は別物）**：本節で多用するこの2つは、別テーブル・
+    別粒度・別担当の列である。混同しないこと。
+    - `order_line.serve_status`（**明細1行ごと**。値 `PENDING`／`PREPARING`／`SERVED`／`CANCELLED`／
+      `REJECTED`）：その品目の提供進捗＋終端状態。`SERVED` は「その1品をホールが客卓に出し終えた」
+      （`served_at` 記録、`domain_event: LINE_SERVED`）を指し、キッチンが作り終えただけでは `SERVED` に
+      ならない。`03` 4.5 の状態遷移に従う。
+    - `kitchen_ticket.status`（**`customer_order`＝伝票ごと**。値 `NEW`／`IN_PROGRESS`／`DONE`）：その伝票の
+      キッチン作業の進捗。`DONE` は「この伝票の調理は完了、または作成不要で KDS から外す」。1枚の
+      `kitchen_ticket` は配下に複数 `order_line` を束ねる（G1）。
+    - 両者の対応はゆるく、常に連動はしない（目安：`NEW`↔配下おおむね `PENDING`、`IN_PROGRESS`↔`PREPARING`
+      を含む、`DONE`↔全明細 `SERVED` または提供済み）。`PREPARING` だけは両列が別粒度で同じ「調理中」を映す。
+    - したがって本節の「`serve_status` が `PENDING` 以外なら `kitchen_ticket` を鳴らさない」「全明細 `SERVED`
+      なら `status = DONE` で作成」は、**明細（`serve_status`）の状態を見て伝票（`kitchen_ticket.status`）の
+      発火要否・初期値を決める**、という読み方になる。
   - **粒度＝G1（確定）**：`kitchen_ticket` は従来どおり `customer_order` 単位で1件発行する（行単位に分割
     しない）。オーダー内の**全明細が `SERVED`** の場合のみ、そのチケットを **`status = DONE` で作成し KDS
     には表示しない**（レコードは監査・スループット分析用に残す）。**1つでも `PENDING` を含むオーダー**は
@@ -927,6 +947,48 @@ public interface PaymentGateway {
     （`SERVED` 明細は KDS 表示クエリのフィルタで除外。スキーマ変更なし）。
   - 細目は未決（`03` 7章3）：「鳴らさない」をアラート抑止のみ（ミュートの照合レーンには出す）とするか
     完全非表示とするか。抑止（`DONE`）したチケットを KDS の滞留時間・スループット指標から除外するか。
+  - **配膳の粒度は明細単位（`kitchen_ticket` は KDS カードの束ね単位であって配膳単位ではない）**：
+    実運用では、スピードメニュー（枝豆・ビール）と時間のかかる品（焼き鳥・煮つけ）を同一オーダーで
+    頼んでも一度には出ず、品ごとに時間差で配膳される。本設計はこれを **`order_line.serve_status`
+    ＋ `served_at`（いずれも明細1行ごと）** で表現する。KDS の調理ビューは `serve_status = PENDING` の
+    明細だけを表示するため、出た品はカードから消え、残りの品だけが表示される。`kitchen_ticket`
+    （`customer_order` 単位＝G1）はカードを束ねる単位で、明細を1品ずつバンプし、最後の1品が片付いて
+    初めて `status = DONE` になる（`CANCELLED`／`REJECTED` 明細は判定対象外）。
+  - **フェーズ1の割り切りと未決事項（KDS 運用）**：上記により配膳の一品単位管理は成立するが、次は
+    フェーズ1では作り込まない（`03` 7章3 の提供済みクラスタと合わせて継続検討）。
+    - **非調理明細（ドリンク等）の振り分け（`prep_type` を追加＝確定）**：`menu_item.prep_type`
+      （`VARCHAR(20)`、`COOK` / `NO_COOK`、既定 `COOK`。§4.4）で調理要否を保持する。
+      `prep_type = NO_COOK`（ビール等）の明細は、`serve_status = PENDING` でも **調理 KDS に出さず
+      `kitchen_ticket` の対象にもしない**（KDS 表示クエリを `prep_type = COOK` で絞る）。伝票の
+      `status = DONE` 判定も `COOK` 明細のみで行い、`NO_COOK` 明細はホール／バーが `serve_status`
+      （`PENDING → SERVED`）だけで提供管理する。オーダーの全 `COOK` 明細が `SERVED`／`NO_COOK` のみ
+      なら `kitchen_ticket` は発行せず（またはオフライン到着時は `status = DONE` で作成）。バー
+      プリンタ／バー表示専用デバイスへのルーティングはフェーズ2以降（`store_setting` にバー出力先を
+      持たせる想定）。
+    - **明細ごとの提供タイミング指示（hold / fire）＝簡易版で対応（確定）**：`order_line` に
+      `fire_state`（`HELD` / `FIRED`、既定 `FIRED`）／`fired_at`／`fired_by` を追加する（§4.6 DDL）。
+      段階（コースステップ）構造は持たず、明細フラグのみで「焼き鳥は後で出す」に対応する。
+      - **既定は `FIRED`**（即調理キュー投入）。`HELD` は「後で出す」品にだけ付く。付与経路は2つ：
+        (a) `course` に紐づく明細で2皿目以降を既定 `HELD` にする、(b) 注文入力時にスタッフが明細単位で
+        「後で」を指定（アラカルトも可）。
+      - **`fire` 操作**：`HELD → FIRED` へ遷移し `fired_at` / `fired_by` を記録。主にホールがハンディ／POS
+        から実行（オーダー内の `HELD` 明細をまとめて、または明細単位で）。自動 fire（前 `fire` から N分、
+        着席から N分のタイマー）はフェーズ2以降。
+      - **KDS 調理ビューの絞り込み**：`serve_status = 'PENDING' AND prep_type = 'COOK' AND
+        fire_state = 'FIRED'`。`HELD` 明細は調理ビューに出さない（`serve_status` は `PENDING` のまま、
+        キッチンには未投入）。
+      - **`kitchen_ticket`**：`HELD` 明細しかないオーダーはチケットを発行しない。初回の `fire` で
+        `FIRED` 明細が生じた時点で発行する（既存チケットがあれば `fire` された明細が調理ビューに現れる）。
+      - **オフライン**：オフライン新規作成明細はペイロードで `fire_state` を初期値として持ち込める
+        （`serve_status` / `served_at` と同じ「INSERT 時の初期状態」扱い）。すでに永続化された `HELD` 行の
+        `fire` は既存行 UPDATE なのでオンライン専用（オフライン中はローカルキューへ退避し復帰後に再生）。
+      - `prep_type = NO_COOK` の明細は調理キューに乗らないため `fire_state` は常に既定 `FIRED` のまま扱う。
+    - **ステーション振り分け**：焼き場・煮方・ドリンク等で KDS 画面を分ける仕組みは持たない（単一 KDS
+      前提。§9 冒頭の「ミュート照合レーン」要否も未決）。将来対応時は `menu_item.kitchen_station`
+      （またはカテゴリ単位の割当）を追加する。
+    - **伝票の滞留時間指標**：KDS の滞留・遅延判定は `customer_order` 単位のため、速い品が出ていても
+      最も遅い品に滞留時間が引っ張られる。指標を明細単位に切り替えるか、抑止済み（`DONE`）チケットを
+      除外するかは上記「細目は未決」と合わせて実装スパイクで決める。
 - **`CLOSED` セッション／`FINALIZED` `check` への着地（フェーズ1方針）**：更新競合は無くても、端末Aが
   オフラインで明細を溜めている間に別のオンライン端末Bが同じ卓の会計を確定し `table_session` が
   `CLOSED` になる、という時間差は残る。復帰後の端末Aの同期が `CLOSED` セッション（または `FINALIZED`
@@ -988,8 +1050,57 @@ public interface PaymentGateway {
     確定する）とする。`kitchen_ticket` へソート用時刻を非正規化コピーするかはクエリ実装の詳細。
     `time_low_confidence` の明細は表示位置がずれ得るが、KDS は一時的表示で不変データを持たないため許容する。
     どの明細をそもそも KDS に出すか（提供済みオフライン分の抑止）は別項目「`kitchen_ticket` 抑止」で決める。
+    - **`HELD` → `fire` された明細の例外**：`fire_state = HELD` から `FIRED` にした明細は、調理の起点が
+      `registered_at` ではなく `fired_at` なので、KDS 上のソート・滞留時間は当該明細については `fired_at`
+      を基準にする（`registered_at` のままだと後出しの品が常に先頭に並んでしまう）。`HELD` を経ていない
+      明細（既定 `FIRED`）は従来どおり `registered_at` 基準。
   - **未決**：端末の生時刻を別列で保持するか、復帰時に端末時計をサーバへ同期するか、`time_low_confidence`
     列の最終的な名称・配置、および D2 の遅延計上フラグの列名（`03` 7章3）。
+- **3つの時間しきい値の関係（考え方の整理）**：本節には性質の異なる3つの「時間」が登場する。これらは
+  独立した軸であり、どれか1つを超えても他がただちに発動するわけではない。混同しやすいので整理しておく。
+  - **`offset`（時計スキュー）／許容上限 `X`**：測っているのは *同期した瞬間の* 端末時計とサーバ時計の
+    ズレ（`offset = server_received_at − client_sent_at`、＋通信遅延）であって、**端末がオフラインだった
+    長さではない**。端末が長時間オフラインでも、時計が正確であれば `offset` はほぼ 0 になる（両者は無関係）。
+    したがって「オフライン時間が `X` を超えたからサーバ時刻で保存する」わけではない。サーバ時刻
+    （`server_received_at`）へ置換するのは、**`|offset|` が `X`（分オーダーの想定）を超える**、または
+    **補正後の時刻が時系列的に破綻する**（対象 `table_session` 開始前・`server_received_at` より未来 等）
+    ケースに限られ、しかも破綻した時刻だけを個別に置換する。`X` 超過そのものを理由にレコードは拒否しない
+    （上記「`offset` の許容上限 `X`」のとおり）。いずれの補正・置換でも低信頼フラグは立てる。
+  - **遅延しきい値 `Y`（リアルタイム性の限界／分オーダー）＝未決の提案**：
+    - **判定対象と条件**：オフラインで新規作成され `serve_status = PENDING`（まだ提供していない）の明細
+      について、**滞留時間 ＝ `server_received_at` − 補正後 `registered_at`** が **しきい値 `Y`（15分を想定）**
+      を超えるか否かで動きを分ける。滞留時間はおおよそ「オフライン継続時間＋キュー送信遅延」に相当する。
+      いまさら自動で KDS を鳴らしても調理オペレーション上は無意味なことがある（KDS 表示順は
+      `registered_at` 基準のため、古い明細は先頭に割り込む）ことが理由。
+    - **`Y` 以内**：現行どおり。`PENDING` オフライン明細は `registered_at` 基準で通常どおり
+      `kitchen_ticket` を発行し KDS に自動表示する。
+    - **`Y` 超過（提案する動き）**：
+      - 明細は**通常どおり INSERT** する。売上・在庫・`business_date` 算出も普通に走る（**拒否しない**）。
+      - `time_low_confidence` とは**別に**「遅延」フラグを立てる。
+      - `kitchen_ticket` を**自動発火させない**。代わりにホール／POS 端末へ「◯分前のオフライン注文です。
+        調理しますか？」の確認を出し、スタッフに調理要否を委ねる。
+        - 「調理する」→ その時点で `kitchen_ticket` を発行し KDS に表示。
+        - 「不要／取消」→ 当該明細を取消（調理対象外）にする。すでに提供実績がある場合は回収不能として
+          ロス計上（下記「`CLOSED` セッション／`FINALIZED` `check` への着地」と同じ扱い）。
+    - **未決**：既存の未決事項「`kitchen_ticket` 抑止」の細目（ミュート照合レーンの要否）と同じ論点。
+      `Y` の具体値・「遅延」フラグの列名・確認UIの要否は実装スパイクで確定する（`03` 7章3）。
+  - **営業日境界／`daily_close`**：`business_date` は原則 *注文された営業日*（補正後 `registered_at` ＋
+    `store_business_day`）に帰属する。`registered_at` は日付ではなくスキュー補正後の**時刻（datetime）**で、
+    これと営業日境界規則から営業日を導出する。オフラインで暦日をまたいでも、居酒屋の営業日境界
+    （深夜〜早朝）の内側であれば同じ `business_date` のまま。
+    - **算出先の営業日がまだ締めていない場合**：その本来の営業日に計上する（`daily_close ≠ CLOSED` なら
+      過去日でもそのまま）。
+    - **算出先の営業日がすでに `daily_close = CLOSED` の場合（D2）**：本来の営業日ではなく、**サーバが
+      同期を処理する時点でオープン中（未締め）の営業日**へ付け替えて計上する。「オンライン復帰の瞬間の
+      日時」ではなく `daily_close` の状態で決まる「いま開いている営業日」である（例：営業日境界が朝5時で
+      端末が深夜3時に復帰した場合、前営業日がまだ開いていればそちらへ計上）。補正後 `registered_at` は
+      実際の注文時刻として列に残し、「前営業日からの遅延計上」を示す理由コード／フラグを明細に立てる。
+      締め済みの `daily_close` へは遡及しない（`CLOSED` の不変性を維持）。
+    - **例外（低信頼明細）**：`time_low_confidence = true` の明細は `registered_at` を信用せず、
+      `business_date` を紐づく `guest_check.business_date` から決める（B2）。
+    - フェーズ1では、遅延同期が `CLOSED` セッション／`FINALIZED` `check` に着地した明細は代金回収せず
+      `domain_event` にロス記録するのみ（上記「`CLOSED` セッション／`FINALIZED` `check` への着地」）。
+      オフライン許容時間の絶対上限（超過時に新規入力を止めるか）は引き続き未決。
 - **復旧処理**：ネットワーク復帰時、クライアントはキューに溜めた未送信レコードを、親子1組（サブツリー）を
   1トランザクションとして上記フラット形式で送信順に再生する。サーバ側の処理順は受信順でよい
   （同一卓内の注文は追記のみで順序整合性への影響がないため）。

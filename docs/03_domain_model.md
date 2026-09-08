@@ -58,7 +58,7 @@
 | エンティティ | 区分 | 目的 | 主な属性（代表） |
 |--------------|:--:|------|------------------|
 | `menu_category`（メニューカテゴリ） | M | 刺身／揚げ物／ドリンク 等 | `id`, `store_id`, `name`, `display_order`（表示順）, `is_active`（有効フラグ） |
-| `menu_item`（メニュー項目） | M | 品目 | `id`, `store_id`, `category_id`, `name`, `description`, `price_jpy`（単価, 円）, `tax_category`（税区分, STANDARD_10/REDUCED_8）, `photo_url`, `serve_time_from`（提供時間帯 開始）, `serve_time_to`（提供時間帯 終了）, `available_from`（提供期間 開始）, `available_to`（提供期間 終了, 期間限定）, `sales_status`（販売状態, ON_SALE/SOLD_OUT/SUSPENDED）, `display_order`（表示順）, `is_active`（有効フラグ） |
+| `menu_item`（メニュー項目） | M | 品目 | `id`, `store_id`, `category_id`, `prep_type`（調理要否, COOK/NO_COOK。NO_COOK=ドリンク等は調理KDS/`kitchen_ticket`の対象外。`04` §9）, `name`, `description`, `price_jpy`（単価, 円）, `tax_category`（税区分, STANDARD_10/REDUCED_8）, `photo_url`, `serve_time_from`（提供時間帯 開始）, `serve_time_to`（提供時間帯 終了）, `available_from`（提供期間 開始）, `available_to`（提供期間 終了, 期間限定）, `sales_status`（販売状態, ON_SALE/SOLD_OUT/SUSPENDED）, `display_order`（表示順）, `is_active`（有効フラグ） |
 | `menu_option_group`（オプション群） | S | 「サイズ」「トッピング」等 | `id`, `store_id`, `menu_item_id`(または共有), `name`, `min_select`（最小選択数）, `max_select`（最大選択数） |
 | `menu_option`（オプション） | S | 「大盛り +150円」等 | `id`, `option_group_id`, `name`, `price_delta_jpy`（追加料金, 円）, `is_active`（有効フラグ） |
 | `course`（コース・飲み放題） | S | 時間管理の対象 | `id`, `store_id`, `name`, `type`（種別, COURSE/FREE_DRINK）, `duration_min`（制限時間, 分）, `last_order_before_min`（終了前ラストオーダー, 分）, `price_jpy`（料金, 円）, `is_active`（有効フラグ） |
@@ -81,7 +81,7 @@
 | `table_session_table`（セッション⇔卓） | S | 卓の結合。1セッションが複数卓を占有 | `table_session_id`, `dining_table_id`, `is_primary`（主卓か） |
 | `mobile_order_session`（モバイルオーダーセッション） | M | 卓上QRから開く未ログインの注文セッション | `id`, `table_session_id`, `qr_token`（QRトークン）, `issued_at`（発行日時）, `expires_at`（有効期限）, `status`(ACTIVE/EXPIRED)（卓クローズで EXPIRED） |
 | `order`（注文＝1回の送信） | M | スタッフ入力 or モバイル送信の単位 | `id`, `table_session_id`, `dining_table_id`（注文時点の物理卓, FK→`dining_table`）, `source`（注文元, STAFF/MOBILE）, `entered_by`（入力者, user, nullable）, `mobile_order_session_id`(nullable), `status`（注文状態, SUBMITTED/ACCEPTED/REJECTED）, `submitted_at`（送信日時）, `accepted_by`（受理者）, `accepted_at`（受理日時）, `reject_reason`（却下理由） |
-| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `registered_at`（登録日時）, `registered_by`（登録者）, `business_date`（注文された営業日。登録時に `registered_at`＋店舗の営業日境界から算出）, `time_low_confidence`（時刻低信頼フラグ, bool。オフラインのスキュー補正が信用できない場合 true）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
+| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `fire_state`（調理投入状態, HELD/FIRED。既定 FIRED。HELD=後出し保留で調理KDS非表示、ホールの fire で FIRED。`04` §9）, `fired_at`（fire 日時。HELD を経た明細は KDS のソート・滞留をこれで測る）, `fired_by`（fire 操作者）, `registered_at`（登録日時）, `registered_by`（登録者）, `business_date`（注文された営業日。登録時に `registered_at`＋店舗の営業日境界から算出）, `time_low_confidence`（時刻低信頼フラグ, bool。オフラインのスキュー補正が信用できない場合 true）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
 | `order_line_option`（明細オプション） | S | 明細に付いたオプションのスナップショット | `id`, `order_line_id`, `option_name_snap`（オプション名スナップショット）, `price_delta_snap_jpy`（追加料金スナップショット, 円） |
 | `kitchen_ticket`（キッチン伝票） | M | KDS 表示・提供管理の単位 | `id`, `order_id`, `store_id`, `status`（調理状態, NEW/IN_PROGRESS/DONE）, `printed_at`（印刷日時）, `updated_at` |
 
@@ -189,6 +189,7 @@ erDiagram
         bigint store_id FK
         bigint category_id FK
         string name
+        string prep_type
         int price_jpy
         string tax_category
         string sales_status
@@ -283,6 +284,8 @@ erDiagram
         string tax_category_snap
         int quantity
         string serve_status
+        string fire_state
+        datetime fired_at
         datetime registered_at
         date business_date
         boolean time_low_confidence
@@ -566,6 +569,10 @@ stateDiagram-v2
   `was_cooked`（廃棄ロス判定）、`cancel_chargeable`（`store_setting` の既定 → スタッフ上書き）を記録（FR-E03 / FR-E03b / FR-B08）。
 - 「作り直し」は元明細を `CANCELLED`（理由 QUALITY 等）にしたうえで新規明細を作成し、`remake_of_line_id` で結ぶ（FR-E03c）。
 - `SERVED` からの取消は `domain_event: LINE_CANCELLED` と `audit_log` の両方に記録。
+- `fire_state`（`HELD` / `FIRED`）は `serve_status` と直交する軸で、「調理をいつ始めるか（後出し）」を表す。
+  既定は `FIRED`。`HELD` の明細は `serve_status = PENDING` のまま調理 KDS に出さず、ホールの `fire` 操作で
+  `FIRED` に遷移して初めて調理キューへ入る（詳細と KDS 挙動は `04` §9。段階＝コースステップ構造は持たない
+  簡易版）。
 
 ### 4.6 会計 `check.status`
 
