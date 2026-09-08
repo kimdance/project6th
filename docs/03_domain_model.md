@@ -81,7 +81,7 @@
 | `table_session_table`（セッション⇔卓） | S | 卓の結合。1セッションが複数卓を占有 | `table_session_id`, `dining_table_id`, `is_primary`（主卓か） |
 | `mobile_order_session`（モバイルオーダーセッション） | M | 卓上QRから開く未ログインの注文セッション | `id`, `table_session_id`, `qr_token`（QRトークン）, `issued_at`（発行日時）, `expires_at`（有効期限）, `status`(ACTIVE/EXPIRED)（卓クローズで EXPIRED） |
 | `order`（注文＝1回の送信） | M | スタッフ入力 or モバイル送信の単位 | `id`, `table_session_id`, `dining_table_id`（注文時点の物理卓, FK→`dining_table`）, `source`（注文元, STAFF/MOBILE）, `entered_by`（入力者, user, nullable）, `mobile_order_session_id`(nullable), `status`（注文状態, SUBMITTED/ACCEPTED/REJECTED）, `submitted_at`（送信日時）, `accepted_by`（受理者）, `accepted_at`（受理日時）, `reject_reason`（却下理由） |
-| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `registered_at`（登録日時）, `registered_by`（登録者）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
+| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `registered_at`（登録日時）, `registered_by`（登録者）, `business_date`（注文された営業日。登録時に `registered_at`＋店舗の営業日境界から算出）, `time_low_confidence`（時刻低信頼フラグ, bool。オフラインのスキュー補正が信用できない場合 true）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
 | `order_line_option`（明細オプション） | S | 明細に付いたオプションのスナップショット | `id`, `order_line_id`, `option_name_snap`（オプション名スナップショット）, `price_delta_snap_jpy`（追加料金スナップショット, 円） |
 | `kitchen_ticket`（キッチン伝票） | M | KDS 表示・提供管理の単位 | `id`, `order_id`, `store_id`, `status`（調理状態, NEW/IN_PROGRESS/DONE）, `printed_at`（印刷日時）, `updated_at` |
 
@@ -284,6 +284,8 @@ erDiagram
         int quantity
         string serve_status
         datetime registered_at
+        date business_date
+        boolean time_low_confidence
         datetime served_at
         datetime cancelled_at
         string cancel_reason
@@ -722,15 +724,76 @@ stateDiagram-v2
      突き合わせる**楽観的ロックでの解禁は採用しない**（長時間オフラインでは版の不一致が高頻度で発生し、
      エラー後の手動照合がかえって増えるため）。こうした更新はオンライン復帰後に行う（アプリがオフライン
      時に当該操作を抑止するか、意図をローカルキューへ退避して復帰後に通常のオンライン更新として再生する）。
-     なお、オフラインで新規作成された明細が初回同期時に自前の `serve_status`／`served_at` を初期値として
-     持ち込めるか（＝提供済みオフライン明細の `kitchen_ticket` 抑止に使えるか）は下記の未解決事項に含む。
+     なお、オフラインで**新規作成された**明細が初回同期時に自前の `serve_status`／`served_at` を初期値として
+     持ち込むことは**認める**（下記「`kitchen_ticket` 抑止」＝案1で確定）。これは「INSERT 時の初期状態」で
+     あって既存行の更新ではないため、上記の禁止対象には当たらない。
+   - **解決済み（`04_architecture.md` §9・§1決定表3）**：スナップショットの鮮度は「**オフライン中は端末が
+     保持するメニューマスタで確定**」とする。オフライン作成明細の `item_name_snap`／`unit_price_snap_jpy`／
+     `tax_category_snap`（およびオプションの `option_name_snap`／`price_delta_snap_jpy`）は、注文時点で
+     端末ローカルのメニューキャッシュから採ったスナップショット値をそのまま採用する。オンライン復帰時、
+     サーバは現行の `menu_item`／オプションマスタで**再計算・再価格付けをしない**（オフライン中にマスタの
+     価格・名称・税区分が変わっていても、端末が持っていた値で確定させる）。※ 対象商品がオフライン中に
+     `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた場合の受入可否（§9 の明細単位検証で却下するか、
+     提供済み前提で通すか）は「`kitchen_ticket` 抑止」と同じ提供済みクラスタの未解決事項として残す。
+   - **解決済み（`04_architecture.md` §9）**：オフライン作成レコードの時刻は「**端末時刻＋スキュー補正**」で
+     確定する。
+     - 端末は同期バッチ送信時に `client_sent_at`（送信時点の端末時計値）を含める。サーバは
+       `offset = server_received_at − client_sent_at` を求め、バッチ内の各オフライン時刻
+       （`order_line.registered_at`、`customer_order.submitted_at`、対応する `domain_event.occurred_at`、
+       A案を採る場合の `order_line.served_at`）に一律加算する。「オフライン中はオフセット一定」を前提と
+       することを許容する。
+     - 補正後の値は**原則そのまま格納し、低信頼フラグを立てる**（分析側が除外可能にする）。ただし補正後が
+       時系列的にあり得ない場合（`table_session` 開始前、`server_received_at` より未来 等）は、その時刻だけ
+       `server_received_at` で置換する。低信頼フラグは永続化し（真偽値列。名称・配置は `04` §4.6 で最終化）、
+       同期レスポンスの `server_fields` でもエコーバックする。
+     - `offset` の許容上限 `X`（これを超えたら定常ドリフトの範囲外とみなす閾値）は**運用設定値**として持つ
+       （システム全体の既定値。店舗別オーバーライドはフェーズ2以降）。端末のクロックドリフトは機種・OS の
+       特性であり店舗業務には依存しないため `store` 単位では持たない。格納方式（汎用設定テーブル新設か
+       アプリ設定か）と、既定値・安全に設定できるレンジは実機のドリフト実測に基づき実装スパイクで確定する。
+   - **解決済み（`04_architecture.md` §9・§4.6）**：オフライン明細の `business_date` 帰属。
+     - `order_line` に `business_date DATE NOT NULL` 列を追加する（A2）。`guest_check.business_date`（＝精算日）
+       とは別に、明細ごとに「注文された営業日」を持つ。
+     - 導出は**補正後 `registered_at` ＋店舗の営業日境界（`store_business_day`）から算出**する（B1）。
+     - ただし `time_low_confidence = true` の明細は `registered_at` を信用せず、`business_date` を紐づく
+       `guest_check.business_date` で決める（B2 フォールバック。低信頼フラグと連動）。
+   - **解決済み（`04_architecture.md` §9）**：B1 の算出先が既に `daily_close = CLOSED` の営業日だった場合
+     （端末が締めをまたいでオフラインだったとき）は **D2 を採用**する。
+     - 当該明細は拒否せず受け入れ、`business_date` を月曜等の締め済み日ではなく**現在のオープン中の営業日**に
+       設定して当日計上する。補正後 `registered_at` は実際の注文時刻として列にそのまま残す。
+     - 明細には「前営業日からの遅延計上」を示す**理由コード／フラグ**を立てる。列名と `sales_daily_report`
+       での前日遅延計上の表示方法（内数・脚注など）は**実装スパイク送り**。
+     - 締め済みの `daily_close` 側には「前日分の遅延計上あり」の通知・フラグは**原則行わない**（`CLOSED` の
+       不変性を維持する）。
+   - **解決済み（`04_architecture.md` §9）**：KDS のチケット表示順の基準時刻は **`registered_at`**（オフラインは
+     補正後）とする。`kitchen_ticket` の生成時刻（`printed_at`＝オフライン分は同期到着時刻）は使わない。
+     `kitchen_ticket` は `customer_order` 単位のため、ソートキーは注文入力時刻（`customer_order.submitted_at`
+     ＝配下 `order_line.registered_at` の最小値）。`time_low_confidence` の明細は表示位置がずれ得るが、KDS は
+     不変データを持たない一時表示のため許容する。どの明細を KDS に出すか（提供済みオフライン分の抑止）は
+     下記「`kitchen_ticket` 抑止」で別途決める。
+   - **解決済み（`04_architecture.md` §9）**：遅延同期時の `kitchen_ticket` 抑止は **案1（ペイロードに
+     `serve_status` を載せる）で確定**。
+     - オフライン作成の `order_line` は、同期ペイロードに端末上での `serve_status`（および `served_at`）を
+       **INSERT 時の初期状態**として含める。サーバは受信時に `serve_status` が `PENDING` 以外（提供済み等）の
+       明細については、**新規 `kitchen_ticket` を KDS に鳴らさない**。
+     - `serve_status = PENDING` のオフライン明細は従来どおり `kitchen_ticket` を発行し、KDS に表示する
+       （表示順は上記のとおり `registered_at` 基準）。
+     - この仕組みは「オフラインは新規追加のみ・既存行の更新は不可」と矛盾しない（サーバの操作は INSERT 1回で、
+       既存行への UPDATE は発生しないため）。
    - 未解決のまま：
      - オフライン許容時間の上限（端末が何時間オフラインのまま新規注文を受け付けてよいか。上限到達時に
        読み取り専用へ落とすか否か、`daily_close` の境界・一時ID対応表の固定TTLとの整合）。
-     - オフライン中の端末時計の信頼性（`registered_at`・`business_date`・KDS表示順をどの時刻で決めるか）。
-     - 遅延同期時の `kitchen_ticket` 抑止（提供済みオフライン明細で KDS を鳴らさない）。
-     - スナップショットの鮮度（オフライン中は端末保持のメニューで確定。マスタがその間に変わっていた
-       場合の扱いの明文化）。
+     - `time_low_confidence` 列の最終的な名称・配置、端末の生時刻を別列で残すか、復帰時に端末時計をサーバ同期するか。
+     - `kitchen_ticket` 抑止（案1）の細目：
+       - **解決済み**：`kitchen_ticket` は従来どおり `customer_order` 単位で1件発行する（行単位に分割しない）。
+         オーダー内の**全明細が `SERVED`（提供済み）**の場合のみ、そのチケットを **`status = DONE` で作成し
+         KDS には表示しない**（レコードは監査・スループット分析用に残す）。**1つでも `PENDING` 明細を含む
+         オーダー**は、チケットを通常どおり KDS に出し、調理ビューに表示する明細を `serve_status = PENDING`
+         のものだけに絞る（`SERVED` 明細は既に `serve_status` 済みなので調理ビューから除外。KDS 表示クエリの
+         フィルタで実現し、スキーマ変更は不要）＝方式 G1。
+       - 未決：「鳴らさない」をアラート抑止のみ（ミュートの照合レーンには出す）とするか完全非表示とするか。
+         対象商品がオフライン中に `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた明細を明細単位検証で
+         却下するか提供済み前提で通すか。抑止（`DONE`）したチケットを KDS の滞留時間・スループット指標から
+         除外するか。
 4. `domain_event` の粒度と保持・アーカイブ方針（件数が多い。パーティション／コールドストレージ）。
 5. モバイルオーダーの `qr_token` の設計：卓固定トークン＋セッション毎の短命トークンの2層にするか。失効・再発行の運用。
 6. 税計算の丸め（会計単位／明細単位）、端数調整（`ROUNDING` ディスカウント）の扱い。
