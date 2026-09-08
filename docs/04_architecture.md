@@ -19,7 +19,7 @@
 |---|------------------|------|------|
 | 1 | `company` と既存 `users` の結合方法 | `company` テーブルを新設し、`company.id`（サロゲートキー）を主キーとする。他の全FK（`store_id`→`store.id` 等）と一貫性を持たせ、`store`・`users`・`user_invitation` に `company_id BIGINT REFERENCES company(id)` を実FKとして追加する。`company` 自身が `company_code`（UK）を持つため、この3テーブルは `company_code` 列を一切持たない（`users.company_code` も削除し、複合UKを `company_id + email` に変更する）。それ以外の業務テーブルの `company_code` 列は非正規化コピー（FK制約なし、`_id`と名付けない）のまま維持する。 | §3.1、§4 |
 | 2 | 卓の結合・分割 | フェーズ1は `table_session_table` による複数卓の**結合（占有）のみ**実装する。分割（会計途中で `order_line` を別セッションへ移送）は**フェーズ2へ送る**（`03` の区分どおり `S`→フェーズ2）。 | §4 |
-| 3 | オフライン同期の競合解決規則 | クライアント一時IDは「**端末ID（サーバがデバイス登録時に発番。`store`短縮コード＋店内連番）＋端末内でグローバルに単調増加する連番**」の合成文字列を、`customer_order`・`order_line`・`order_line_option` の**各レコードの** `client_ref_id`（`VARCHAR(40)`）に持たせ、各テーブルの `UNIQUE(..., client_ref_id)` と `staff_device.last_accepted_seq` で**サブツリー全階層の**冪等性を担保する。同期ペイロードは**フラットなレコード配列＋FK列に一時ID**の形式とし、作り直し参照は `remake_of_line_id`（確定ID）と `remake_of_line_ref`（一時ID、ペイロード専用）に分けて持つ。バッチ内の依存順は**アプリ層のトポロジカルソート**で解決する（DB の遅延制約は使わない）。同期レスポンスは、エンベロープ（`server_received_at`／`last_accepted_seq`）＋送信レコード全件に対応するフラットな `records[]`（`type`／`client_ref_id`／`id`／`status`／任意の `server_fields`・`error`）を返す。クライアント側の一時ID↔確定ID対応表は、対象 `table_session` が `CLOSED` になるまで保持し以後破棄する（バックストップの固定TTL付き）。部分失敗はハイブリッド（サブツリー前提の検証は all-or-nothing、個々の明細検証は部分コミット）で扱い、落ちた明細は `REJECTED`＋`error.code`、その子は `SKIPPED` で返す。`error.code` 付き `REJECTED` は永続的失敗（自動再送せずスタッフへエスカレーション）とし、一時的失敗は 5xx／タイムアウト等で判定してバッチ全体を指数バックオフ再送する。端末の再セットアップ時は端末IDを再発番し、旧IDは再利用しない。オフライン中は**注文明細の新規追加のみ**許可し、数量変更・取消・会計・決済はオンライン復帰後にのみ許可することで、更新競合そのものを設計上発生させない。永続化済み行への更新は `serve_status` の `PENDING→SERVED` を含めオフライン不可とし、`updated_at`／`version` 比較の楽観的ロックでの解禁も採用しない（既存行の更新意図はローカルキューへ退避し復帰後にオンライン操作として再生）。遅延同期が `CLOSED` セッション／`FINALIZED` `check` に着地した場合はフェーズ1では代金回収せず、回収不能（廃棄ロス／サービス提供分）として `domain_event` に記録するのみとする（オフライン許容時間の上限は未決）。 | §9 |
+| 3 | オフライン同期の競合解決規則 | クライアント一時IDは「**端末ID（サーバがデバイス登録時に発番。`store`短縮コード＋店内連番）＋端末内でグローバルに単調増加する連番**」の合成文字列を、`customer_order`・`order_line`・`order_line_option` の**各レコードの** `client_ref_id`（`VARCHAR(40)`）に持たせ、各テーブルの `UNIQUE(..., client_ref_id)` と `staff_device.last_accepted_seq` で**サブツリー全階層の**冪等性を担保する。同期ペイロードは**フラットなレコード配列＋FK列に一時ID**の形式とし、作り直し参照は `remake_of_line_id`（確定ID）と `remake_of_line_ref`（一時ID、ペイロード専用）に分けて持つ。バッチ内の依存順は**アプリ層のトポロジカルソート**で解決する（DB の遅延制約は使わない）。同期レスポンスは、エンベロープ（`server_received_at`／`last_accepted_seq`）＋送信レコード全件に対応するフラットな `records[]`（`type`／`client_ref_id`／`id`／`status`／任意の `server_fields`・`error`）を返す。クライアント側の一時ID↔確定ID対応表は、対象 `table_session` が `CLOSED` になるまで保持し以後破棄する（バックストップの固定TTL付き）。部分失敗はハイブリッド（サブツリー前提の検証は all-or-nothing、個々の明細検証は部分コミット）で扱い、落ちた明細は `REJECTED`＋`error.code`、その子は `SKIPPED` で返す。`error.code` 付き `REJECTED` は永続的失敗（自動再送せずスタッフへエスカレーション）とし、一時的失敗は 5xx／タイムアウト等で判定してバッチ全体を指数バックオフ再送する。端末の再セットアップ時は端末IDを再発番し、旧IDは再利用しない。オフライン中は**注文明細の新規追加のみ**許可し、数量変更・取消・会計・決済はオンライン復帰後にのみ許可することで、更新競合そのものを設計上発生させない。永続化済み行への更新は `serve_status` の `PENDING→SERVED` を含めオフライン不可とし、`updated_at`／`version` 比較の楽観的ロックでの解禁も採用しない（既存行の更新意図はローカルキューへ退避し復帰後にオンライン操作として再生）。遅延同期が `CLOSED` セッション／`FINALIZED` `check` に着地した場合はフェーズ1では代金回収せず、回収不能（廃棄ロス／サービス提供分）として `domain_event` に記録するのみとする（オフライン許容時間の上限は未決）。オフライン作成明細のメニュースナップショット（名称・価格・税区分）は端末保持のキャッシュ値で確定し、サーバは復帰時に再価格付けしない。オフライン作成レコードの時刻は端末時計＋スキュー補正（リクエストに `client_sent_at` を追加し `offset = server_received_at − client_sent_at` をバッチ内の各時刻へ一律加算）で確定し、補正値は低信頼フラグ付きで格納、時系列的に破綻する時刻のみ `server_received_at` へ置換する。`order_line` に `business_date` 列を追加し、補正後 `registered_at` ＋店舗の営業日境界から算出（低信頼明細は `guest_check.business_date` を継承）。算出先が締め済み営業日なら拒否せずオープン中の営業日へ寄せて理由コード付きで当日計上（D2、`daily_close` は不変のまま）。`offset` 許容上限 `X` はシステム全体の運用設定値（店舗別オーバーライドはフェーズ2以降）とし、格納方式・既定値・レンジは実装スパイクで確定。KDS のチケット表示順は `printed_at` ではなく注文入力時刻（`submitted_at`／`registered_at`、オフラインは補正後）を基準にする。オフライン作成明細はペイロードに `serve_status`／`served_at` を初期状態として載せ（案1）、`kitchen_ticket` は `customer_order` 単位のまま、全明細 `SERVED` のオーダーのみ `status = DONE`・KDS 非表示、`PENDING` を含むオーダーは KDS に出し表示明細を `PENDING` に絞る（G1）。ミュート照合レーンの要否・遅延計上／低信頼フラグの列名は未決。 | §9 |
 | 4 | `domain_event` の粒度・保持方針 | 集約単位（`TABLE_SESSION`/`ORDER_LINE`/`CHECK`/`PAYMENT`/`DAILY_CLOSE`）の主要状態変化のみを記録（列変更の逐一記録はしない）。直近13か月はオンラインテーブル、それ以降は月次パーティションでコールドストレージへ退避し、10年で削除する。 | §8 |
 | 5 | モバイルオーダー `qr_token` の設計 | 2層構成を採用。`dining_table.qr_token` は卓に固定された長命トークン（店舗設定画面から手動再発行可）。`mobile_order_session.qr_token` は読み取りの都度発行される短命トークンで、卓クローズ時に失効する。 | §7.4 |
 | 6 | 税計算の丸め・端数調整 | インボイス制度の要求に従い、**1会計（適格請求書）につき税率区分ごとに1回だけ**端数処理する（`check_tax_line` 単位）。端数処理方式は**切り捨て**を既定とする。現金精算等で生じる1円未満の調整は `check_discount.type = ROUNDING` で表現する。 | §6.4 |
@@ -418,6 +418,8 @@ CREATE TABLE order_line (
         CHECK (serve_status IN ('PENDING','PREPARING','SERVED','CANCELLED','REJECTED')),
     registered_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     registered_by          VARCHAR(255) NOT NULL,
+    business_date          DATE NOT NULL, -- 注文された営業日。登録時に registered_at（オフラインは補正後）＋店舗の営業日境界から算出（§9）
+    time_low_confidence    BOOLEAN NOT NULL DEFAULT false, -- (仮称) 端末時計のスキュー補正が X 超過／時系列破綻でサーバ時刻置換のとき true（§9）
     served_at              TIMESTAMPTZ,
     cancelled_at           TIMESTAMPTZ,
     cancelled_by           VARCHAR(255),
@@ -430,6 +432,7 @@ CREATE TABLE order_line (
     UNIQUE (table_session_id, client_ref_id)
 );
 CREATE INDEX ix_order_line_table_session ON order_line(table_session_id);
+CREATE INDEX ix_order_line_business_date ON order_line(business_date); -- 明細粒度の日次集計・分析用（§9）
 
 CREATE TABLE order_line_option (
     id                      BIGINT PK,
@@ -908,9 +911,22 @@ public interface PaymentGateway {
   オンライン更新経路側に `version` 列で導入することは別途検討してよい）。オフライン中に既存行を更新したい
   操作は、アプリがオフライン時に抑止するか、意図をローカルキューへ退避してオンライン復帰後に通常の
   オンライン更新として再生する。
-  - オフラインで**新規作成された**明細が初回同期ペイロードで自前の `serve_status`／`served_at` を初期値
-    として持ち込めるか（提供済みオフライン明細の `kitchen_ticket` 抑止に使う案）は未決（`03` 7章3の
-    「`kitchen_ticket` 抑止」）。
+  - オフラインで**新規作成された**明細は、初回同期ペイロードで端末上の `serve_status`／`served_at` を
+    **INSERT 時の初期状態**として持ち込んでよい（下記「`kitchen_ticket` 抑止＝案1」で確定）。既存行への
+    UPDATE ではないため上記の禁止対象には当たらない。
+- **`kitchen_ticket` 抑止（提供済みオフライン明細で KDS を鳴らさない）＝案1（確定）**：オフライン作成の
+  `order_line` は同期ペイロードに端末上の `serve_status`（提供済みなら `served_at` も）を初期状態として含める。
+  サーバは受信時、`serve_status` が `PENDING` 以外の明細については**新規 `kitchen_ticket` を KDS に鳴らさない**。
+  `serve_status = PENDING` のオフライン明細は従来どおり `kitchen_ticket` を発行し KDS に表示する（表示順は
+  `registered_at` 基準）。サーバの操作は INSERT 1回のみで既存行 UPDATE は発生しないため、「オフラインは
+  新規追加のみ・既存行の更新は不可」と矛盾しない。
+  - **粒度＝G1（確定）**：`kitchen_ticket` は従来どおり `customer_order` 単位で1件発行する（行単位に分割
+    しない）。オーダー内の**全明細が `SERVED`** の場合のみ、そのチケットを **`status = DONE` で作成し KDS
+    には表示しない**（レコードは監査・スループット分析用に残す）。**1つでも `PENDING` を含むオーダー**は
+    チケットを通常どおり KDS に出し、調理ビューの表示明細を `serve_status = PENDING` のものだけに絞る
+    （`SERVED` 明細は KDS 表示クエリのフィルタで除外。スキーマ変更なし）。
+  - 細目は未決（`03` 7章3）：「鳴らさない」をアラート抑止のみ（ミュートの照合レーンには出す）とするか
+    完全非表示とするか。抑止（`DONE`）したチケットを KDS の滞留時間・スループット指標から除外するか。
 - **`CLOSED` セッション／`FINALIZED` `check` への着地（フェーズ1方針）**：更新競合は無くても、端末Aが
   オフラインで明細を溜めている間に別のオンライン端末Bが同じ卓の会計を確定し `table_session` が
   `CLOSED` になる、という時間差は残る。復帰後の端末Aの同期が `CLOSED` セッション（または `FINALIZED`
@@ -922,6 +938,58 @@ public interface PaymentGateway {
   通知を出し、店舗側は物理的な提供実績と突き合わせて棚卸し・ロス計上で処理する。代金回収経路
   （追加請求・翌営業日補正）の整備はフェーズ2以降とする。なお、端末のオフライン許容時間の上限
   （超過時に新規入力を止めるか否か）は未決とする（`03` 7章3）。
+- **スナップショットの鮮度（オフライン中は端末保持のメニューで確定）**：オフライン作成明細の
+  `item_name_snap`／`unit_price_snap_jpy`／`tax_category_snap`、および `order_line_option` の
+  `option_name_snap`／`price_delta_snap_jpy` は、注文時点で端末ローカルのメニューキャッシュから採った
+  スナップショット値を採用する。オンライン復帰時、サーバは現行の `menu_item`／オプションマスタで
+  **価格・名称・税区分を再計算しない**——オフライン中にマスタが変わっていても端末が持っていた値で
+  確定させる。`order_line` は元々注文時点のスナップショット列を持つ設計であり、この決定は「端末の
+  キャッシュが古くてもよく、サーバは復帰時に補正しない」ことを明文化するもの。
+  - 対象商品がオフライン中に `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた場合に、明細単位
+    検証（本節「部分失敗時の扱い」2.）で `SOLD_OUT`／`ITEM_SUSPENDED`／`ITEM_INACTIVE` として却下するか、
+    提供済み前提でそのまま通すかは未決（`03` 7章3、提供済みオフライン明細クラスタ）。
+- **オフライン中の端末時計とタイムスタンプ（端末時刻＋スキュー補正）**：オフライン作成レコードの時刻は、
+  端末時計の値をサーバ側でスキュー補正して確定する。
+  - **`client_sent_at`**：同期ペイロードのエンベロープに `client_sent_at`（バッチ送信時点の端末時計値）を
+    追加する。サーバは `offset = server_received_at − client_sent_at` を算出し、バッチ内の各オフライン時刻
+    ——`order_line.registered_at`、`customer_order.submitted_at`、対応する `domain_event.occurred_at`、および
+    オフライン明細が自前の `served_at` を持ち込む案（本節「新規レコードの作成のみ」の未決サブ項目）を
+    採る場合の `order_line.served_at`——に**一律加算**する。「オフライン継続中はオフセットがおおむね一定」
+    （時計が一定量ズレているだけ）を前提として許容する。
+  - **補正値の格納と低信頼フラグ（案の基本）**：補正後の時刻は**そのまま格納**し、**低信頼フラグ**を立てる
+    （分析・集計側がこのフラグで除外できる）。フラグは永続化する想定で、`order_line`／`customer_order` に
+    真偽値列を持たせる方向（列名・配置は §4.6 DDL で最終化）。同期レスポンスの `server_fields` でも当該時刻と
+    フラグをエコーバックする。
+  - **時系列破綻時のみサーバ時刻へ置換**：補正後の値が時系列的にあり得ない場合（対象 `table_session` の
+    開始前、`server_received_at` より未来、など）は、その時刻だけ `server_received_at`（またはバッチ受信
+    時刻）で置換する。置換したレコードにも低信頼フラグを立てる。置換は「相対間隔を保って全体をずらす」
+    のではなく該当時刻単位で行う。
+  - **`offset` の許容上限 `X`**：`|offset|` が `X` を超えたら定常ドリフトの範囲外（時計がオフライン中に
+    変更された等）とみなす。上限超過時も上記（低信頼フラグ＋時系列破綻分のみ置換）と同じ扱いとし、超過
+    そのものを理由にレコードを拒否はしない。`X` は**運用設定値**として持つ——**システム全体の単一既定値**とし、
+    店舗別オーバーライドはフェーズ2以降。端末のクロックドリフトは機種・OS 特性であり店舗業務に依存しない
+    ため `store` 単位では持たない。格納方式（汎用設定テーブルの新設か、アプリ設定〔環境変数／設定ファイル〕
+    か）と、既定値・安全に設定できるレンジは実機のドリフト実測に基づき**実装スパイクで確定**する。
+  - **`business_date` の帰属（確定）**：`order_line` に `business_date DATE NOT NULL` 列を追加し（A2）、
+    登録時に**補正後 `registered_at` ＋店舗の営業日境界（`store_business_day`）から算出**する（B1）。
+    `guest_check.business_date` は従来どおり精算日を保持し、明細の「注文された営業日」とは別に持つ。
+    ただし `time_low_confidence = true` の明細は `registered_at` を信用せず、`business_date` を紐づく
+    `guest_check.business_date`（B2）で決める。
+  - **B1 の算出先が締め済み営業日だった場合＝D2（確定）**：端末が `daily_close` をまたいでオフラインだった
+    結果、補正後 `registered_at` が `daily_close = CLOSED` の営業日を指す場合は、当該明細を**拒否せず受け入れ**、
+    `business_date` を締め済み日ではなく**同期処理時点でオープン中の営業日**に設定して当日計上する（D2）。
+    補正後 `registered_at` は実際の注文時刻として列にそのまま残す。明細には「前営業日からの遅延計上」を示す
+    理由コード／フラグを立てる（列名、および `sales_daily_report` での前日遅延計上の表示方法は実装スパイクで
+    確定）。締め済みの `daily_close` 側には遅延計上ありの通知・フラグは**行わない**（`CLOSED` の不変性を維持）。
+  - **KDS 表示順の基準時刻＝`registered_at`（確定）**：KDS のチケット表示順は、`kitchen_ticket` の生成時刻
+    （`printed_at`＝オフライン分は同期到着時刻）ではなく、**注文明細の `registered_at`（オフラインは補正後）**
+    を基準にする。`kitchen_ticket` は `customer_order` 単位なので、ソートキーはその注文の入力時刻
+    （`customer_order.submitted_at`、＝配下 `order_line.registered_at` の最小値。両者は入力時に同一補正で
+    確定する）とする。`kitchen_ticket` へソート用時刻を非正規化コピーするかはクエリ実装の詳細。
+    `time_low_confidence` の明細は表示位置がずれ得るが、KDS は一時的表示で不変データを持たないため許容する。
+    どの明細をそもそも KDS に出すか（提供済みオフライン分の抑止）は別項目「`kitchen_ticket` 抑止」で決める。
+  - **未決**：端末の生時刻を別列で保持するか、復帰時に端末時計をサーバへ同期するか、`time_low_confidence`
+    列の最終的な名称・配置、および D2 の遅延計上フラグの列名（`03` 7章3）。
 - **復旧処理**：ネットワーク復帰時、クライアントはキューに溜めた未送信レコードを、親子1組（サブツリー）を
   1トランザクションとして上記フラット形式で送信順に再生する。サーバ側の処理順は受信順でよい
   （同一卓内の注文は追記のみで順序整合性への影響がないため）。
