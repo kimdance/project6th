@@ -43,7 +43,23 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
-		
+
+		<!-- DB マイグレーション管理（docs/04_architecture.md §2, §13） -->
+		<!-- Spring Boot 4 では Flyway の自動設定が spring-boot-flyway モジュールに分離されている。
+		     flyway-core だけでは FlywayAutoConfiguration が classpath に載らないため明示的に追加する。 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>

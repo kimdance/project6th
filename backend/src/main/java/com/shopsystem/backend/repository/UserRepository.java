@@ -4,9 +4,14 @@ import com.shopsystem.backend.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    
-    // 会社コードとメールアドレスの組み合わせの存在チェック用メソッド（Spring Data JPAが自動生成）
-    boolean existsByCompanyCodeAndEmail(String companyCode, String email);
+
+    // ログイン照合・重複チェックはテナント（company_id）＋ email で行う（04_architecture.md §3.1 / §6.1）。
+    // company_id はサブドメイン由来のセッションから解決した値を渡す。
+    Optional<User> findByCompany_IdAndEmail(Long companyId, String email);
+
+    boolean existsByCompany_IdAndEmail(Long companyId, String email);
 }
