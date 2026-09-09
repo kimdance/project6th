@@ -907,6 +907,8 @@ CREATE TABLE outbound_message (
     （`role = OWNER`／`store_id = NULL`）を1トランザクションで作成する。`company_code` と `ownerEmail`
     は小文字化して保存。パスワードは `{bcrypt}` ハッシュで保存。重複 `company_code` は 409。
   - 作成後、オーナーは `<company_code>.<サービスドメイン>/` からメール＋パスワードでログインする。
+  - 運営者の実務手順とインポート用の Postman コレクションは `docs/ops/`（`README.md` /
+    `tenant-provisioning.postman_collection.json`）に置く。
   - **フェーズ2**：`accounts.<サービスドメイン>`（開発は `accounts.localhost`）上の公開セルフサービス
     サインアップ画面（申込者がフォーム入力）、メール到達確認、レート制限、および運営者コンソール。
     そのときサブドメイン未発行の問題は `accounts.` 固定ホストで回避する（`company` 行が無いため

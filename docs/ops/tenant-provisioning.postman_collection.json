@@ -1,0 +1,50 @@
+{
+  "info": {
+    "name": "project6th – テナント作成（運営者）",
+    "description": "フェーズ1の運営者によるテナント作成。POST /api/v1/admin/tenants を呼び、company と最初の users（OWNER）を作成する。詳細は docs/ops/README.md、設計は docs/04_architecture.md §6.1 / docs/02_requirements.md FR-A02c。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "テナント作成  POST /api/v1/admin/tenants",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Operator-Token",
+            "value": "{{operatorToken}}",
+            "description": "運営者の合言葉。サーバの app.operator.provision-token と一致しないと 403。"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/tenants",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "admin", "tenants"]
+        },
+        "body": {
+          "mode": "raw",
+          "options": { "raw": { "language": "json" } },
+          "raw": "{\n  \"companyCode\": \"acme-izakaya\",\n  \"companyName\": \"アクメ居酒屋\",\n  \"ownerName\": \"山田太郎\",\n  \"ownerEmail\": \"owner@acme.example\",\n  \"password\": \"pass1234\"\n}"
+        },
+        "description": "companyCode: 半角小文字の英数字とハイフン・3〜63文字（先頭/末尾/連続のハイフン不可・予約語不可）。\ncompanyCode と ownerEmail は小文字化して保存。password は 8文字以上・英字と数字を含む。\n\nレスポンス:\n  201 Created  { \"companyCode\": \"...\" }  … 作成成功\n  400          入力エラー（errors[] にフィールドごとの内容）\n  403          合言葉が未設定/不一致\n  409          companyCode が既に使われている"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "operatorToken",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
