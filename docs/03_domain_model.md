@@ -671,8 +671,9 @@ stateDiagram-v2
    （`store_id`→`store.id` 等）と一貫させて `store`・`users`・`user_invitation` に実FKの
    `company_id BIGINT REFERENCES company(id)` を追加する。`company` 自身が `company_code`（UK）を持つため、
    `store`・`users`・`user_invitation` には `company_code` 列は一切持たせない（`users.company_code` も削除し、
-   複合ユニーク制約は `company_code + email` から `company_id + email` に変更する）。登録・ログイン画面で
-   利用者が入力する `company_code` は、`company` テーブルへの参照検索（`WHERE company_code = ?`）で
+   複合ユニーク制約は `company_code + email` から `company_id + email` に変更する）。`company_code` は
+   新規テナント登録では登録フォームの入力項目、ログイン以降はURLサブドメイン（`04_architecture.md`
+   §6.1）から入手し、いずれも `company` テーブルへの参照検索（`WHERE lower(company_code) = ?`）で
    `company_id` に変換してから使う。それ以外の業務テーブルの `company_code` 列は、`store_id` から
    `store.company_id` を辿れば会社を特定できるため実FKにはせず、テナント絞り込み用の非正規化コピー
    （FK制約なし）のまま維持する。

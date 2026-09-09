@@ -4,6 +4,7 @@
 - **対象システム（仮称）**: 居酒屋店舗システム（SaaS型） ／ AIネイティブ再構築版
 - **作成日**: 2026-09-05
 - **ステータス**: **フェーズ1向け凍結（2026-09-09）**。`03` 第7章の未決事項12件は全件解決。以降の変更はフェーズ1スコープ内の誤り訂正・実装スパイク結果の反映に限る（残る先送り項目は §15）。
+  - 2026-09-09 追補：ログイン時のテナント指定を「画面入力の `company_code`」から「URLサブドメイン＋サーバ側セッション」へ改訂（`02_requirements.md` FR-A02/A02a/A02b）。影響範囲は §2・§3.1・§3.2・§6.1・§6.2・§6.3。物理スキーマは、`company_code` をサブドメインラベルに使うため §4.3 の `company.company_code` を `VARCHAR(20)` から `VARCHAR(63)` に拡張し、形式 `CHECK`（`ck_company_code_format`）を追加。非正規化コピー列（`menu_category`・`menu_item`・`reservation`・`table_session`・`staff_device`・`audit_log`・`domain_event`）の `company_code` も `VARCHAR(63)` に統一。`V1__init_schema.sql` は未適用のため直接反映。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -40,6 +41,7 @@
 - バックエンド：Spring Boot 4.x / Java 21 / Maven。パッケージルートは既存踏襲で `com.shopsystem.backend`。
 - DB：PostgreSQL。マイグレーション管理は **Flyway** を採用する（`src/main/resources/db/migration/V<n>__<desc>.sql`）。
   Hibernate の `ddl-auto` はフェーズ1から `validate` 固定とし、スキーマ変更は必ずマイグレーションファイル経由で行う。
+- 認証：ログイン**前**のテナント識別は **URLサブドメイン＋サーバ側セッション**、ログイン**後**は JWT を正とする（§6.1）。
 - AI/LLM 基盤：フェーズ1では実装しない（`01` 5.5 のとおり差し込み位置だけ確保）。
 
 ---
@@ -48,9 +50,23 @@
 
 ### 3.1 データモデル上の分離
 
-- `company` を新設し、`id BIGINT`（サロゲートキー）を主キーとする。`company_code`（`varchar(20)`）は
-  登録・ログイン画面で人間が入力する自然キーとして `UNIQUE NOT NULL` を維持するが、他テーブルからの
-  参照キー（FK）としては使わない。
+- `company` を新設し、`id BIGINT`（サロゲートキー）を主キーとする。`company_code` は
+  テナント識別コード（新規テナント登録画面で入力し、ログイン以降は §6.1 のとおりURLサブドメインで
+  指定する自然キー）として `UNIQUE NOT NULL` を維持するが、他テーブルからの参照キー（FK）としては
+  使わない。
+- **`company_code` の形式（サブドメインラベルとして使うための制約）**：
+  - 型・長さ：`VARCHAR(63)`（DNSラベルの上限63オクテットに合わせる。従来の `varchar(20)` から拡張）。
+    `company_code` 列を持つ非正規化コピー側（`menu_category`・`menu_item`・`reservation`・`table_session`・
+    `staff_device`・`audit_log`・`domain_event`）も同じ `VARCHAR(63)` に揃える。
+  - 文字種：`^[a-z0-9]+(-[a-z0-9]+)*$`（小文字英数字とハイフン。先頭・末尾はハイフン不可、連続ハイフン
+    不可）。長さ 3〜63。照合はすべて小文字化して行う（`WHERE lower(company_code) = ?`、`Host` ヘッダも
+    小文字化して比較）。
+  - 予約語の拒否：`www` `api` `accounts` `admin` `app` `auth` `login` `signup` `mail` `static` `assets`
+    `cdn` `status` `help` `support` `dev` `staging` `test` `demo` `pos` `guest` `kds` `internal` `public`
+    等はサブドメイン運用と衝突するため発番不可（アプリ層のデニーリストで拒否、リストは拡張可能）。
+  - 強制箇所：**アプリ層バリデーション（サインアップ API `POST /api/v1/signup`）** で文字種・長さ・
+    予約語をすべて検証する。加えて **DB の `CHECK` 制約**（`company.ck_company_code_format`＝文字種と
+    長さのみ。予約語はアプリ層のみ）を `V1__init_schema.sql` に含める。
 - `store`・`users`・`user_invitation` は `company` に直接ぶら下がる最上位のテーブルであるため、他の全FK
   （`store_id`→`store.id`、`category_id`→`menu_category.id` 等）と一貫性を持たせ、
   `company_id BIGINT NOT NULL REFERENCES company(id)` を実FKとして持つ。`company` 自身が `company_code`
@@ -60,10 +76,11 @@
   存在しないため、後方互換のために残す理由はない）。`company_id` 追加前に、既存データに存在する
   `company_code` の重複しない値ごとに `company` 行をバックフィルする。
 - `users` の複合ユニーク制約は `company_code + email` から `company_id + email` に変更する
-  （`uk_users_company_code_email` を `uk_users_company_id_email` に置き換え）。登録・ログイン画面で
-  利用者が入力する `company_code` は、リクエスト処理時に `company` テーブルを `WHERE company_code = ?`
-  で検索して `company_id` に変換してから使う（DTO・リクエストボディの入力項目としては残るが、
-  `users` テーブルの列としては持たない）。
+  （`uk_users_company_code_email` を `uk_users_company_id_email` に置き換え）。`company_code` の入手元は
+  フローで異なる：**新規テナント登録**は登録フォームの入力項目、**ログイン以降**はURLサブドメイン
+  （§6.1）。いずれの場合も `company` テーブルを `WHERE lower(company_code) = ?`（大文字小文字を
+  区別しない）で検索して `company_id` に変換してから使い、`users` テーブルの列としては持たない。
+  ログインAPIのリクエストボディに `company_code` は含めない（§6.1）。
 - `store` 配下の全業務テーブルは `store_id BIGINT NOT NULL REFERENCES store(id)` を持つ（`user.store_id` のみ
   「全店」を表す `NULL` を許容）。`store_id` が既に `store.company_id` を経由して会社を一意に特定できるため、
   `store`・`users`・`user_invitation` 以外の業務テーブルには `company_id` を追加しない。
@@ -78,6 +95,12 @@
 
 - 認証済みリクエストのコンテキスト（JWT のクレーム）から `company_id`／`company_code`、ユーザーの `store_id`
   （`NULL`＝全店）を解決し、リクエストスコープの `TenantContext`（`ThreadLocal` ベース）に保持する。
+- 未認証リクエスト（ログイン画面の表示・ログイン・パスワードリセット）は JWT を持たないため、テナントは
+  **URLサブドメイン**から解決する。`Host` ヘッダ先頭ラベルを `company_code` として（大文字小文字を
+  区別せず）`company` を検索し、存在すれば `company_id`／`company_code` をサーバ側セッション
+  （`HttpSession`）に格納したうえで `TenantContext` に載せる。存在しなければ 404（§6.1）。認証後は
+  各リクエストで「JWT の `company_code` ＝ セッションの `company_code` ＝ サブドメイン」の一致を検証し、
+  不一致は 401/404 とする（テナントAのトークンをテナントBのサブドメインで使わせない）。
 - 全リポジトリは `BaseRepository<T>` を継承し、`findById` 系を含むすべての参照・更新メソッドでテナント
   条件を `WHERE` に強制注入する。Spring Data JPA では Hibernate の `@FilterDef`/`@Filter` を2種類定義する：
   `company_code` 列を持つエンティティ（`menu_item`、`reservation` 等の業務テーブル）には
@@ -139,10 +162,14 @@ updated_by  VARCHAR(255)
 ```sql
 CREATE TABLE company (
     id               BIGINT PK,
-    company_code     VARCHAR(20) NOT NULL UNIQUE,
+    company_code     VARCHAR(63) NOT NULL UNIQUE, -- URLサブドメインのラベル（§3.1）。DNSラベル上限に合わせて63
     name             VARCHAR(255) NOT NULL,
     contract_status  VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'
-        CHECK (contract_status IN ('ACTIVE','SUSPENDED','CANCELLED'))
+        CHECK (contract_status IN ('ACTIVE','SUSPENDED','CANCELLED')),
+    CONSTRAINT ck_company_code_format CHECK (   -- 形式・長さのみ。予約語の拒否はアプリ層（§3.1）
+        company_code ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+        AND char_length(company_code) BETWEEN 3 AND 63
+    )
 );
 
 CREATE TABLE store (
@@ -208,7 +235,7 @@ CREATE INDEX ix_user_invitation_token ON user_invitation(token);
 ```sql
 CREATE TABLE menu_category (
     id             BIGINT PK,
-    company_code   VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code   VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id       BIGINT NOT NULL REFERENCES store(id),
     name           VARCHAR(100) NOT NULL,
     display_order  INTEGER NOT NULL DEFAULT 0,
@@ -217,7 +244,7 @@ CREATE TABLE menu_category (
 
 CREATE TABLE menu_item (
     id               BIGINT PK,
-    company_code     VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code     VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id         BIGINT NOT NULL REFERENCES store(id),
     category_id      BIGINT NOT NULL REFERENCES menu_category(id),
     prep_type        VARCHAR(20) NOT NULL DEFAULT 'COOK'
@@ -345,7 +372,7 @@ CREATE TABLE store_business_day (
 ```sql
 CREATE TABLE reservation (
     id                BIGINT PK,
-    company_code      VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code      VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id          BIGINT NOT NULL REFERENCES store(id),
     reserved_at       TIMESTAMPTZ NOT NULL,
     party_size        INTEGER NOT NULL,
@@ -380,7 +407,7 @@ CREATE TABLE reservation_notification (
 ```sql
 CREATE TABLE table_session (
     id                 BIGINT PK,
-    company_code       VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code       VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id           BIGINT NOT NULL REFERENCES store(id),
     status             VARCHAR(20) NOT NULL DEFAULT 'OPEN'
         CHECK (status IN ('OPEN','BILLING','CLOSED')),
@@ -414,7 +441,7 @@ CREATE TABLE mobile_order_session (
 
 CREATE TABLE staff_device (
     id                 BIGINT PK,
-    company_code       VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code       VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id           BIGINT NOT NULL REFERENCES store(id),
     device_code        VARCHAR(20) NOT NULL, -- 端末ID。store短縮コード + 店内連番。例 'S12-07'
     label              VARCHAR(100),         -- 表示名（'ホール1号機' 等）
@@ -783,7 +810,7 @@ CREATE TABLE time_clock (
 ```sql
 CREATE TABLE audit_log (
     id               BIGINT PK,
-    company_code     VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code     VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id         BIGINT REFERENCES store(id),
     actor            VARCHAR(255) NOT NULL,
     action           VARCHAR(50) NOT NULL,
@@ -799,7 +826,7 @@ CREATE INDEX ix_audit_log_company_occurred ON audit_log(company_code, occurred_a
 
 CREATE TABLE domain_event (
     id               BIGINT PK,
-    company_code     VARCHAR(20) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
+    company_code     VARCHAR(63) NOT NULL, -- 非正規化コピー（FK制約なし。§3.1）
     store_id         BIGINT REFERENCES store(id),
     aggregate_type   VARCHAR(30) NOT NULL
         CHECK (aggregate_type IN ('TABLE_SESSION','ORDER_LINE','CHECK','PAYMENT','DAILY_CLOSE')),
@@ -846,11 +873,38 @@ CREATE TABLE outbound_message (
 
 ### 6.1 認証・認可
 
-- ログインは `company_code + email + password` を入力とする（既存踏襲）。`company_code` は `users` の
-  列ではなく `company` を検索して `company_id` に解決し、`company_id + email` で `users` を照合する
-  （§3.1）。成功時に JWT（アクセストークン15分 / リフレッシュトークン14日）を発行し、クレームに
-  `company_id`、`company_code`（解決結果。`company_code` 列を持つ業務テーブルのテナントフィルタ用）、
-  `user_id`、`store_id`（nullable）、`role` を含める。
+- **テナントはURLのサブドメインで識別する**：`<company_code>.<サービスドメイン>`。開発環境は
+  `<company_code>.localhost`（Chrome/Firefox は `*.localhost` をループバックに解決するため `hosts` 編集は
+  不要）。本番のサービスドメインはワイルドカードDNS・ワイルドカード証明書を張る前提で、ホスティング先
+  確定後に固定する（`02` 11.1）。
+- `admin` / `pos` アプリはサブドメイン配下で配信する。サーバは各リクエストの `Host` 先頭ラベルを
+  `company_code` とみなし（大文字小文字を区別しない。ブラウザがホスト名を小文字化するため
+  `lower(company_code)` で照合）、`company` を検索する。
+  - 見つからない場合（`www`・apex・存在しないコードを含む）：**HTTP 404 ＋ 汎用エラーページ**。
+    テナントの存在有無は漏らさない（§6.2 の「403 ではなく 404」と同じ方針）。
+  - 見つかった場合：`company_id`／`company_code` を**サーバ側セッション**（`HttpSession`）に保持する。
+    セッションCookie は当該サブドメインに限定（`Domain` 属性を付けず host-only）、`Secure`／`HttpOnly`／
+    `SameSite=Lax`。フロントはログイン画面表示のため `GET /api/v1/auth/tenant` を呼び、会社名等の
+    表示情報を得る（非存在時は 404）。
+- **ログイン画面の入力項目はメールアドレスとパスワードのみ**。`POST /api/v1/auth/login` のボディも
+  `{ email, password }` のみとし、`company_code` は受け取らない。認証は**セッションの `company_id`** ＋
+  入力の `email`／`password` で行い、`company_id + email` で `users` を照合する（§3.1）。
+- 認証成功時に JWT（アクセストークン15分 / リフレッシュトークン14日）を発行し、クレームに
+  `company_id`、`company_code`（`company_code` 列を持つ業務テーブルのテナントフィルタ用）、
+  `user_id`、`store_id`（nullable）、`role` を含める。以後の認証済みリクエストは §3.2 のとおり JWT を
+  正とし、加えて「JWT の `company_code` ＝ セッション ＝ サブドメイン」の一致を毎リクエスト検証する。
+- パスワードリセット（FR-A04）もサブドメイン配下で行い、入力はメールアドレスのみ（テナントは
+  セッションから取得）。
+- **新規テナント登録（サインアップ）**はサブドメイン未発行（`company` 行が無いため対応するサブドメインが
+  存在せず、アクセスしても FR-A02a で 404 になる）のため、テナントに依存しない固定ホスト
+  **`accounts.<サービスドメイン>`**（開発は `accounts.localhost`）で受け付ける。登録フォームで
+  希望 `company_code`・会社名・オーナーのメール・パスワードを入力し、サーバは `company_code` の一意性と
+  DNSラベル形式（`§3.1`）を検証したうえで `company` 行と最初の `users` 行（`role = OWNER`）を作成する。
+  完了後は `<company_code>.<サービスドメイン>/` へリダイレクトし、以降は通常のログイン（メール＋
+  パスワードのみ）。`company_code` を人間が画面入力するのはこの経路のみ。
+- 既存テナントへの**招待受諾**（FR-A03）は会社が既に存在するため、その会社のサブドメイン上
+  （`<company_code>.<サービスドメイン>/invitations/<token>/accept`）で受け付ける。`accounts.` ホストは
+  新規テナント作成専用とする。
 - モバイルオーダーは未ログインのため JWT を発行しない。代わりに `mobile_order_session` の
   `qr_token` を署名付き短命トークン（JWTではなく単純なランダム文字列＋サーバ側セッション参照）として
   クライアントの `sessionStorage` に保持し、リクエストヘッダで送る。
@@ -860,6 +914,11 @@ CREATE TABLE outbound_message (
 - REST + OpenAPI（`springdoc-openapi` で自動生成）。ベースパスは `/api/v1`。
 - 認証系以外は原則 `/api/v1/stores/{storeId}/...` の配下に置き、`storeId` は必ずテナントコンテキストと
   照合する（他店舗IDを指定してもテナント外なら404を返す。存在有無を漏らさないため403ではなく404）。
+- `/api/v1/auth/*` および未認証エンドポイントのテナントは、リクエストボディではなく**サブドメイン由来の
+  サーバ側セッション**から解決する（§6.1）。フロントは同一サブドメインオリジンから呼び出し、
+  セッションCookie を送出する（クロスサブドメインでのCookie共有はしない）。唯一の例外は
+  `POST /api/v1/signup`（`accounts.<サービスドメイン>` 経由）で、これはテナントがまだ存在しないため
+  サブドメイン解決の対象外とし、ボディの `companyCode` で新規 `company` を作成する。
 - 一覧系はカーソルベースページング（`?cursor=...&limit=...`）を既定とする（`created_at,id` の複合キー）。
 - エラーレスポンスは既存 `ErrorResponse`/`ErrorItem` を継承し、`code`（アプリ定義のエラーコード）、
   `message`、`details[]` を返す統一フォーマットとする。
@@ -870,7 +929,8 @@ CREATE TABLE outbound_message (
 
 | リソース | メソッド・パス | 対応FR |
 |----------|----------------|--------|
-| 認証 | `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/password-reset` | FR-A01, A04 |
+| 認証 | `GET /api/v1/auth/tenant`（サブドメインからテナント解決。存在時 `{ companyCode, companyName }` を返しセッションに保持、非存在は 404）、`POST /api/v1/auth/login`（ボディは `{ email, password }` のみ）、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/password-reset`（ボディは `{ email }` のみ） | FR-A01, A02, A02a, A02b, A04 |
+| サインアップ | `POST /api/v1/signup`（`accounts.<サービスドメイン>` 経由。ボディは `{ companyCode, companyName, ownerEmail, password }`。`company` ＋ 最初の `users`〈`OWNER`〉を作成） | FR-A02（新規テナント作成） |
 | 招待 | `POST /api/v1/stores/{storeId}/invitations`、`POST /api/v1/invitations/{token}/accept` | FR-A03 |
 | 店舗設定 | `GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | `GET/POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`POST /api/v1/public/stores/{storeCode}/reservations`（Web予約・認証不要） | FR-C01〜C09 |
