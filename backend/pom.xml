@@ -44,6 +44,13 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- パスワードハッシュ化（BCrypt）。Spring Security 一式ではなく暗号ユーティリティのみ。
+		     認証フィルタ等が必要になった時点で spring-boot-starter-security へ拡張する。 -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+
 		<!-- DB マイグレーション管理（docs/04_architecture.md §2, §13） -->
 		<!-- Spring Boot 4 では Flyway の自動設定が spring-boot-flyway モジュールに分離されている。
 		     flyway-core だけでは FlywayAutoConfiguration が classpath に載らないため明示的に追加する。 -->
