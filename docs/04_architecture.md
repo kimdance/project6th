@@ -5,6 +5,7 @@
 - **作成日**: 2026-09-05
 - **ステータス**: **フェーズ1向け凍結（2026-09-09）**。`03` 第7章の未決事項12件は全件解決。以降の変更はフェーズ1スコープ内の誤り訂正・実装スパイク結果の反映に限る（残る先送り項目は §15）。
   - 2026-09-09 追補：ログイン時のテナント指定を「画面入力の `company_code`」から「URLサブドメイン＋サーバ側セッション」へ改訂（`02_requirements.md` FR-A02/A02a/A02b）。影響範囲は §2・§3.1・§3.2・§6.1・§6.2・§6.3。物理スキーマは、`company_code` をサブドメインラベルに使うため §4.3 の `company.company_code` を `VARCHAR(20)` から `VARCHAR(63)` に拡張し、形式 `CHECK`（`ck_company_code_format`）を追加。非正規化コピー列（`menu_category`・`menu_item`・`reservation`・`table_session`・`staff_device`・`audit_log`・`domain_event`）の `company_code` も `VARCHAR(63)` に統一。`V1__init_schema.sql` は未適用のため直接反映。
+  - 2026-09-09 追補（テナント作成）：フェーズ1のテナント作成は**運営者専用**とし（`02` §3.1「運営者＝テナント作成」に整合）、合言葉付きの `POST /api/v1/admin/tenants`（ヘッダ `X-Operator-Token` を `app.operator.provision-token` と照合。未設定なら機能オフ）で受け付ける。公開のセルフサービス・サインアップ（`accounts.<サービスドメイン>` の申込フォーム）とメール到達確認・レート制限・運営者コンソールはフェーズ2。§6.1／§6.2／§6.3 を改訂。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -51,9 +52,9 @@
 ### 3.1 データモデル上の分離
 
 - `company` を新設し、`id BIGINT`（サロゲートキー）を主キーとする。`company_code` は
-  テナント識別コード（新規テナント登録画面で入力し、ログイン以降は §6.1 のとおりURLサブドメインで
-  指定する自然キー）として `UNIQUE NOT NULL` を維持するが、他テーブルからの参照キー（FK）としては
-  使わない。
+  テナント識別コード（テナント作成時に指定し〈フェーズ1は運営者が入力。§6.1〉、ログイン以降は §6.1 の
+  とおりURLサブドメインで指定する自然キー）として `UNIQUE NOT NULL` を維持するが、他テーブルからの
+  参照キー（FK）としては使わない。
 - **`company_code` の形式（サブドメインラベルとして使うための制約）**：
   - 型・長さ：`VARCHAR(63)`（DNSラベルの上限63オクテットに合わせる。従来の `varchar(20)` から拡張）。
     `company_code` 列を持つ非正規化コピー側（`menu_category`・`menu_item`・`reservation`・`table_session`・
@@ -64,9 +65,9 @@
   - 予約語の拒否：`www` `api` `accounts` `admin` `app` `auth` `login` `signup` `mail` `static` `assets`
     `cdn` `status` `help` `support` `dev` `staging` `test` `demo` `pos` `guest` `kds` `internal` `public`
     等はサブドメイン運用と衝突するため発番不可（アプリ層のデニーリストで拒否、リストは拡張可能）。
-  - 強制箇所：**アプリ層バリデーション（サインアップ API `POST /api/v1/signup`）** で文字種・長さ・
-    予約語をすべて検証する。加えて **DB の `CHECK` 制約**（`company.ck_company_code_format`＝文字種と
-    長さのみ。予約語はアプリ層のみ）を `V1__init_schema.sql` に含める。
+  - 強制箇所：**アプリ層バリデーション（テナント作成 API `POST /api/v1/admin/tenants`）** で文字種・
+    長さ・予約語をすべて検証する。加えて **DB の `CHECK` 制約**（`company.ck_company_code_format`＝
+    文字種と長さのみ。予約語はアプリ層のみ）を `V1__init_schema.sql` に含める。
 - `store`・`users`・`user_invitation` は `company` に直接ぶら下がる最上位のテーブルであるため、他の全FK
   （`store_id`→`store.id`、`category_id`→`menu_category.id` 等）と一貫性を持たせ、
   `company_id BIGINT NOT NULL REFERENCES company(id)` を実FKとして持つ。`company` 自身が `company_code`
@@ -77,9 +78,10 @@
   `company_code` の重複しない値ごとに `company` 行をバックフィルする。
 - `users` の複合ユニーク制約は `company_code + email` から `company_id + email` に変更する
   （`uk_users_company_code_email` を `uk_users_company_id_email` に置き換え）。`company_code` の入手元は
-  フローで異なる：**新規テナント登録**は登録フォームの入力項目、**ログイン以降**はURLサブドメイン
-  （§6.1）。いずれの場合も `company` テーブルを `WHERE lower(company_code) = ?`（大文字小文字を
-  区別しない）で検索して `company_id` に変換してから使い、`users` テーブルの列としては持たない。
+  フローで異なる：**テナント作成**はリクエストボディの入力項目（フェーズ1は運営者が指定。§6.1）、
+  **ログイン以降**はURLサブドメイン（§6.1）。いずれの場合も `company` テーブルを
+  `WHERE lower(company_code) = ?`（大文字小文字を区別しない）で検索して `company_id` に変換してから
+  使い、`users` テーブルの列としては持たない。
   ログインAPIのリクエストボディに `company_code` は含めない（§6.1）。
 - `store` 配下の全業務テーブルは `store_id BIGINT NOT NULL REFERENCES store(id)` を持つ（`user.store_id` のみ
   「全店」を表す `NULL` を許容）。`store_id` が既に `store.company_id` を経由して会社を一意に特定できるため、
@@ -895,16 +897,22 @@ CREATE TABLE outbound_message (
   正とし、加えて「JWT の `company_code` ＝ セッション ＝ サブドメイン」の一致を毎リクエスト検証する。
 - パスワードリセット（FR-A04）もサブドメイン配下で行い、入力はメールアドレスのみ（テナントは
   セッションから取得）。
-- **新規テナント登録（サインアップ）**はサブドメイン未発行（`company` 行が無いため対応するサブドメインが
-  存在せず、アクセスしても FR-A02a で 404 になる）のため、テナントに依存しない固定ホスト
-  **`accounts.<サービスドメイン>`**（開発は `accounts.localhost`）で受け付ける。登録フォームで
-  希望 `company_code`・会社名・オーナーのメール・パスワードを入力し、サーバは `company_code` の一意性と
-  DNSラベル形式（`§3.1`）を検証したうえで `company` 行と最初の `users` 行（`role = OWNER`）を作成する。
-  完了後は `<company_code>.<サービスドメイン>/` へリダイレクトし、以降は通常のログイン（メール＋
-  パスワードのみ）。`company_code` を人間が画面入力するのはこの経路のみ。
+- **新規テナント作成**：フェーズ1では**公開のセルフサービス登録は行わない**。テナント作成は運営者
+  （自社）の作業とし（`02_requirements.md` §3.1「システム運営者｜テナント作成…フェーズ1は最小限」）、
+  運営者が合言葉付きで `POST /api/v1/admin/tenants` を呼ぶ。
+  - リクエストヘッダ `X-Operator-Token` を設定値 `app.operator.provision-token` と定数時間比較する。
+    未設定なら受付を常に拒否（機能オフ）、不一致は 403。
+  - ボディ `{ companyCode, companyName, ownerName, ownerEmail, password }`。サーバは `company_code` の
+    DNSラベル形式・予約語・長さ（§3.1）と一意性を検証し、`company` 行と最初の `users` 行
+    （`role = OWNER`／`store_id = NULL`）を1トランザクションで作成する。`company_code` と `ownerEmail`
+    は小文字化して保存。パスワードは `{bcrypt}` ハッシュで保存。重複 `company_code` は 409。
+  - 作成後、オーナーは `<company_code>.<サービスドメイン>/` からメール＋パスワードでログインする。
+  - **フェーズ2**：`accounts.<サービスドメイン>`（開発は `accounts.localhost`）上の公開セルフサービス
+    サインアップ画面（申込者がフォーム入力）、メール到達確認、レート制限、および運営者コンソール。
+    そのときサブドメイン未発行の問題は `accounts.` 固定ホストで回避する（`company` 行が無いため
+    `<company_code>` サブドメインは FR-A02a で 404 になる）。
 - 既存テナントへの**招待受諾**（FR-A03）は会社が既に存在するため、その会社のサブドメイン上
-  （`<company_code>.<サービスドメイン>/invitations/<token>/accept`）で受け付ける。`accounts.` ホストは
-  新規テナント作成専用とする。
+  （`<company_code>.<サービスドメイン>/invitations/<token>/accept`）で受け付ける。
 - モバイルオーダーは未ログインのため JWT を発行しない。代わりに `mobile_order_session` の
   `qr_token` を署名付き短命トークン（JWTではなく単純なランダム文字列＋サーバ側セッション参照）として
   クライアントの `sessionStorage` に保持し、リクエストヘッダで送る。
@@ -917,8 +925,9 @@ CREATE TABLE outbound_message (
 - `/api/v1/auth/*` および未認証エンドポイントのテナントは、リクエストボディではなく**サブドメイン由来の
   サーバ側セッション**から解決する（§6.1）。フロントは同一サブドメインオリジンから呼び出し、
   セッションCookie を送出する（クロスサブドメインでのCookie共有はしない）。唯一の例外は
-  `POST /api/v1/signup`（`accounts.<サービスドメイン>` 経由）で、これはテナントがまだ存在しないため
-  サブドメイン解決の対象外とし、ボディの `companyCode` で新規 `company` を作成する。
+  `POST /api/v1/admin/tenants`（運営者によるテナント作成）で、これはテナントがまだ存在しないため
+  サブドメイン解決の対象外とし、`X-Operator-Token`（合言葉）で認可してボディの `companyCode` で
+  新規 `company` を作成する（§6.1）。
 - 一覧系はカーソルベースページング（`?cursor=...&limit=...`）を既定とする（`created_at,id` の複合キー）。
 - エラーレスポンスは既存 `ErrorResponse`/`ErrorItem` を継承し、`code`（アプリ定義のエラーコード）、
   `message`、`details[]` を返す統一フォーマットとする。
@@ -930,7 +939,7 @@ CREATE TABLE outbound_message (
 | リソース | メソッド・パス | 対応FR |
 |----------|----------------|--------|
 | 認証 | `GET /api/v1/auth/tenant`（サブドメインからテナント解決。存在時 `{ companyCode, companyName }` を返しセッションに保持、非存在は 404）、`POST /api/v1/auth/login`（ボディは `{ email, password }` のみ）、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/password-reset`（ボディは `{ email }` のみ） | FR-A01, A02, A02a, A02b, A04 |
-| サインアップ | `POST /api/v1/signup`（`accounts.<サービスドメイン>` 経由。ボディは `{ companyCode, companyName, ownerEmail, password }`。`company` ＋ 最初の `users`〈`OWNER`〉を作成） | FR-A02（新規テナント作成） |
+| テナント作成（運営者専用） | `POST /api/v1/admin/tenants`（ヘッダ `X-Operator-Token` 必須。ボディは `{ companyCode, companyName, ownerName, ownerEmail, password }`。`company` ＋ 最初の `users`〈`OWNER`〉を作成。重複は 409、合言葉不一致・未設定は 403） | `02` §3.1（運営者＝テナント作成）。公開サインアップはフェーズ2 |
 | 招待 | `POST /api/v1/stores/{storeId}/invitations`、`POST /api/v1/invitations/{token}/accept` | FR-A03 |
 | 店舗設定 | `GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | `GET/POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`POST /api/v1/public/stores/{storeCode}/reservations`（Web予約・認証不要） | FR-C01〜C09 |
