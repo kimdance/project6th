@@ -3,7 +3,7 @@
 - **ドキュメント種別**: 上流工程 / ドメインモデル（概念モデル・ER・状態遷移）
 - **対象システム（仮称）**: 居酒屋店舗システム（SaaS型） ／ AIネイティブ再構築版
 - **作成日**: 2026-09-03
-- **ステータス**: ドラフト（レビュー用）
+- **ステータス**: **フェーズ1向け凍結（2026-09-09）**。第7章の未決事項は全件解決済み（残課題はフェーズ1スコープ外または実装スパイク送り）。以降の変更はフェーズ1スコープ内の誤り訂正・実装スパイク結果の反映に限る。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`（本書は 02 のフェーズ1要件に基づく）
 
 > 本書はフェーズ1の要件（`02_requirements.md` 第5章 FR-A〜FR-K、および第2.5節の決定事項）に基づいて、
@@ -58,7 +58,7 @@
 | エンティティ | 区分 | 目的 | 主な属性（代表） |
 |--------------|:--:|------|------------------|
 | `menu_category`（メニューカテゴリ） | M | 刺身／揚げ物／ドリンク 等 | `id`, `store_id`, `name`, `display_order`（表示順）, `is_active`（有効フラグ） |
-| `menu_item`（メニュー項目） | M | 品目 | `id`, `store_id`, `category_id`, `name`, `description`, `price_jpy`（単価, 円）, `tax_category`（税区分, STANDARD_10/REDUCED_8）, `photo_url`, `serve_time_from`（提供時間帯 開始）, `serve_time_to`（提供時間帯 終了）, `available_from`（提供期間 開始）, `available_to`（提供期間 終了, 期間限定）, `sales_status`（販売状態, ON_SALE/SOLD_OUT/SUSPENDED）, `display_order`（表示順）, `is_active`（有効フラグ） |
+| `menu_item`（メニュー項目） | M | 品目 | `id`, `store_id`, `category_id`, `prep_type`（調理要否, COOK/NO_COOK。NO_COOK=ドリンク等は調理KDS/`kitchen_ticket`の対象外。`04` §9）, `name`, `description`, `price_jpy`（単価, 円）, `tax_category`（税区分, STANDARD_10/REDUCED_8）, `photo_url`, `serve_time_from`（提供時間帯 開始）, `serve_time_to`（提供時間帯 終了）, `available_from`（提供期間 開始）, `available_to`（提供期間 終了, 期間限定）, `sales_status`（販売状態, ON_SALE/SOLD_OUT/SUSPENDED）, `display_order`（表示順）, `is_active`（有効フラグ） |
 | `menu_option_group`（オプション群） | S | 「サイズ」「トッピング」等 | `id`, `store_id`, `menu_item_id`(または共有), `name`, `min_select`（最小選択数）, `max_select`（最大選択数） |
 | `menu_option`（オプション） | S | 「大盛り +150円」等 | `id`, `option_group_id`, `name`, `price_delta_jpy`（追加料金, 円）, `is_active`（有効フラグ） |
 | `course`（コース・飲み放題） | S | 時間管理の対象 | `id`, `store_id`, `name`, `type`（種別, COURSE/FREE_DRINK）, `duration_min`（制限時間, 分）, `last_order_before_min`（終了前ラストオーダー, 分）, `price_jpy`（料金, 円）, `is_active`（有効フラグ） |
@@ -81,7 +81,7 @@
 | `table_session_table`（セッション⇔卓） | S | 卓の結合。1セッションが複数卓を占有 | `table_session_id`, `dining_table_id`, `is_primary`（主卓か） |
 | `mobile_order_session`（モバイルオーダーセッション） | M | 卓上QRから開く未ログインの注文セッション | `id`, `table_session_id`, `qr_token`（QRトークン）, `issued_at`（発行日時）, `expires_at`（有効期限）, `status`(ACTIVE/EXPIRED)（卓クローズで EXPIRED） |
 | `order`（注文＝1回の送信） | M | スタッフ入力 or モバイル送信の単位 | `id`, `table_session_id`, `dining_table_id`（注文時点の物理卓, FK→`dining_table`）, `source`（注文元, STAFF/MOBILE）, `entered_by`（入力者, user, nullable）, `mobile_order_session_id`(nullable), `status`（注文状態, SUBMITTED/ACCEPTED/REJECTED）, `submitted_at`（送信日時）, `accepted_by`（受理者）, `accepted_at`（受理日時）, `reject_reason`（却下理由） |
-| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `registered_at`（登録日時）, `registered_by`（登録者）, `business_date`（注文された営業日。登録時に `registered_at`＋店舗の営業日境界から算出）, `time_low_confidence`（時刻低信頼フラグ, bool。オフラインのスキュー補正が信用できない場合 true）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
+| `order_line`（注文明細） | M | 品目単位。分析の最小粒度 | `id`, `order_id`, `table_session_id`, `menu_item_id`, `item_name_snap`（品名スナップショット）, `unit_price_snap_jpy`（単価スナップショット, 円）, `tax_category_snap`（税区分スナップショット）, `quantity`（数量）, `note`, `serve_status`（提供状態, PENDING/PREPARING/SERVED/CANCELLED/REJECTED）, `fire_state`（調理投入状態, HELD/FIRED。既定 FIRED。HELD=後出し保留で調理KDS非表示、ホールの fire で FIRED。`04` §9）, `fired_at`（fire 日時。HELD を経た明細は KDS のソート・滞留をこれで測る）, `fired_by`（fire 操作者）, `registered_at`（登録日時）, `registered_by`（登録者）, `business_date`（注文された営業日。登録時に `registered_at`＋店舗の営業日境界から算出）, `time_low_confidence`（時刻低信頼フラグ, bool。オフラインのスキュー補正が信用できない場合 true）, `served_at`（提供日時）, `cancelled_at`（取消日時）, `cancelled_by`（取消者）, `cancel_reason`（取消理由, ORDER_MISTAKE/QUALITY/DELAY/WRONG_SERVE/SOLD_OUT/CUSTOMER/OTHER）, `cancel_chargeable`（課金対象か, bool）, `was_cooked`(bool＝廃棄ロス判定), `remake_of_line_id`（作り直し元明細, self, nullable） |
 | `order_line_option`（明細オプション） | S | 明細に付いたオプションのスナップショット | `id`, `order_line_id`, `option_name_snap`（オプション名スナップショット）, `price_delta_snap_jpy`（追加料金スナップショット, 円） |
 | `kitchen_ticket`（キッチン伝票） | M | KDS 表示・提供管理の単位 | `id`, `order_id`, `store_id`, `status`（調理状態, NEW/IN_PROGRESS/DONE）, `printed_at`（印刷日時）, `updated_at` |
 
@@ -189,6 +189,7 @@ erDiagram
         bigint store_id FK
         bigint category_id FK
         string name
+        string prep_type
         int price_jpy
         string tax_category
         string sales_status
@@ -283,6 +284,8 @@ erDiagram
         string tax_category_snap
         int quantity
         string serve_status
+        string fire_state
+        datetime fired_at
         datetime registered_at
         date business_date
         boolean time_low_confidence
@@ -566,6 +569,10 @@ stateDiagram-v2
   `was_cooked`（廃棄ロス判定）、`cancel_chargeable`（`store_setting` の既定 → スタッフ上書き）を記録（FR-E03 / FR-E03b / FR-B08）。
 - 「作り直し」は元明細を `CANCELLED`（理由 QUALITY 等）にしたうえで新規明細を作成し、`remake_of_line_id` で結ぶ（FR-E03c）。
 - `SERVED` からの取消は `domain_event: LINE_CANCELLED` と `audit_log` の両方に記録。
+- `fire_state`（`HELD` / `FIRED`）は `serve_status` と直交する軸で、「調理をいつ始めるか（後出し）」を表す。
+  既定は `FIRED`。`HELD` の明細は `serve_status = PENDING` のまま調理 KDS に出さず、ホールの `fire` 操作で
+  `FIRED` に遷移して初めて調理キューへ入る（詳細と KDS 挙動は `04` §9。段階＝コースステップ構造は持たない
+  簡易版）。
 
 ### 4.6 会計 `check.status`
 
@@ -733,8 +740,9 @@ stateDiagram-v2
      端末ローカルのメニューキャッシュから採ったスナップショット値をそのまま採用する。オンライン復帰時、
      サーバは現行の `menu_item`／オプションマスタで**再計算・再価格付けをしない**（オフライン中にマスタの
      価格・名称・税区分が変わっていても、端末が持っていた値で確定させる）。※ 対象商品がオフライン中に
-     `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた場合の受入可否（§9 の明細単位検証で却下するか、
-     提供済み前提で通すか）は「`kitchen_ticket` 抑止」と同じ提供済みクラスタの未解決事項として残す。
+     `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた場合の受入可否は、下記「`kitchen_ticket`
+     抑止（案1）の細目」で解決済み（`serve_status` で分岐：`PENDING` は `REJECTED`、`PREPARING`／`SERVED`
+     は却下せず INSERT）。
    - **解決済み（`04_architecture.md` §9）**：オフライン作成レコードの時刻は「**端末時刻＋スキュー補正**」で
      確定する。
      - 端末は同期バッチ送信時に `client_sent_at`（送信時点の端末時計値）を含める。サーバは
@@ -779,10 +787,20 @@ stateDiagram-v2
        （表示順は上記のとおり `registered_at` 基準）。
      - この仕組みは「オフラインは新規追加のみ・既存行の更新は不可」と矛盾しない（サーバの操作は INSERT 1回で、
        既存行への UPDATE は発生しないため）。
-   - 未解決のまま：
-     - オフライン許容時間の上限（端末が何時間オフラインのまま新規注文を受け付けてよいか。上限到達時に
-       読み取り専用へ落とすか否か、`daily_close` の境界・一時ID対応表の固定TTLとの整合）。
-     - `time_low_confidence` 列の最終的な名称・配置、端末の生時刻を別列で残すか、復帰時に端末時計をサーバ同期するか。
+   - 残課題（フェーズ1スコープ外または実装スパイク送り。凍結の妨げにはならない）：
+     - ~~オフライン許容時間の上限（端末が何時間オフラインのまま新規注文を受け付けてよいか。上限到達時に
+       読み取り専用へ落とすか否か、`daily_close` の境界・一時ID対応表の固定TTLとの整合）。~~
+       **フェーズ1は上限を設けない（端末は無制限にオフライン明細を溜められる）で確定。** 上限到達時の
+       読み取り専用移行を含む上限設計は、`offset` 許容上限 `X` と同じ運用設定の器に載せてフェーズ2以降で
+       行う。スキーマにもサーバの受け入れ分岐にも影響しない（遅延着地は D2／`SESSION_CLOSED` の既存分岐で
+       処理される）。
+     - ~~`time_low_confidence` 列の最終的な名称・配置、端末の生時刻を別列で残すか、復帰時に端末時計をサーバ同期するか。~~
+       **解決済み（`04_architecture.md` §4.6・§9）**：列名は `order_line.time_low_confidence`
+       （`BOOLEAN NOT NULL DEFAULT false`）で確定。理由（`X` 超過／時系列破綻置換）は区別せず真偽値1本。
+       配置は `order_line` のみ（`customer_order` には持たせない。`submitted_at` は配下明細の
+       `registered_at` の最小値であり、信頼性が要る処理は明細側のフラグを参照する）。スキュー補正前の
+       端末時計値は `order_line.registered_at_device_raw`（オフライン作成分のみ、オンライン分は NULL）に
+       残す。復帰時に端末時計をサーバへ同期し直す仕組みはフェーズ2以降。
      - `kitchen_ticket` 抑止（案1）の細目：
        - **解決済み**：`kitchen_ticket` は従来どおり `customer_order` 単位で1件発行する（行単位に分割しない）。
          オーダー内の**全明細が `SERVED`（提供済み）**の場合のみ、そのチケットを **`status = DONE` で作成し
@@ -790,22 +808,148 @@ stateDiagram-v2
          オーダー**は、チケットを通常どおり KDS に出し、調理ビューに表示する明細を `serve_status = PENDING`
          のものだけに絞る（`SERVED` 明細は既に `serve_status` 済みなので調理ビューから除外。KDS 表示クエリの
          フィルタで実現し、スキーマ変更は不要）＝方式 G1。
-       - 未決：「鳴らさない」をアラート抑止のみ（ミュートの照合レーンには出す）とするか完全非表示とするか。
-         対象商品がオフライン中に `SOLD_OUT`／`SUSPENDED`／`is_active = false` になっていた明細を明細単位検証で
-         却下するか提供済み前提で通すか。抑止（`DONE`）したチケットを KDS の滞留時間・スループット指標から
-         除外するか。
-4. `domain_event` の粒度と保持・アーカイブ方針（件数が多い。パーティション／コールドストレージ）。
-5. モバイルオーダーの `qr_token` の設計：卓固定トークン＋セッション毎の短命トークンの2層にするか。失効・再発行の運用。
-6. 税計算の丸め（会計単位／明細単位）、端数調整（`ROUNDING` ディスカウント）の扱い。
-7. `receipt` の適格請求書レイアウトと PDF 生成方式（サーバ生成／テンプレート）。
-8. `staff` と `user` の一体化度合い（打刻のみの非ログインスタッフを許容するか）。
-9. 売上日報の「客数」「組数」の定義（`table_session.party_size` の合計／`table_session` 件数）。
-10. `menu_option_*`・`course` をフェーズ1に含めるか（現状 `S`）。含めない場合、`order_line.note` で代替。
-11. （フェーズ2構想）顧客の会員登録・テナント単位でのログイン・過去の予約履歴閲覧。
-    `guest`（顧客）エンティティを新設し、`user`（スタッフ）とは別の認証経路とする想定
-    （`company_code + email` の複合UKなど、命名・分離方針は `user` に準拠しつつ検討）。
-    `reservation` には `guest_id`（nullable, FK→`guest`）を追加し、匿名予約（フェーズ1の
-    `guest_name`/`guest_phone`/`guest_email`）とログイン済み顧客の予約を共存させる。
+       - **解決済み（`04_architecture.md` §9）**：「鳴らさない」の強さは**フェーズ1は完全非表示**で確定。
+         `status = DONE` のチケットは KDS のどのレーンにも出さず（DB には監査・分析用に残す）、アラート
+         抑止のみに留めて「ミュートの照合レーン」に出す案は採らない。照合レーン自体がフェーズ1では
+         未実装で、必要になればフェーズ2で照合レーンごと格上げする。
+       - **解決済み（`04_architecture.md` §9）**：オフライン中に `SOLD_OUT`／`SUSPENDED`／
+         `is_active = false` になっていた商品の明細は、**`serve_status` で分岐**する。`PENDING`（未提供）は
+         従来どおり `REJECTED`、`PREPARING`／`SERVED`（オフライン中に手作業で厨房へ通して調理中／提供済み）
+         は却下せず INSERT し、売上をスナップショット値で計上したうえで `domain_event` に監査記録する。
+       - **解決済み（`04_architecture.md` §9・§4.7）**：案1で「オフライン提供済み」明細から同期時に
+         `status = DONE` で生成した伝票は、KDS の滞留時間・スループット・平均調理時間などの厨房指標から
+         **除外**する（売上・提供実績カウントには含める）。通常営業で `DONE` 遷移した G1 の伝票は指標に
+         含める。識別のため `kitchen_ticket.offline_settled`（`BOOLEAN NOT NULL DEFAULT false`）を追加し、
+         案1が `DONE` 伝票を作るときのみ `true` を立てる。
+4. ~~`domain_event` の粒度と保持・アーカイブ方針（件数が多い。パーティション／コールドストレージ）。~~
+   **解決済み（`04_architecture.md` §1決定表 行4・§8）**：粒度は `aggregate_type`
+   （`TABLE_SESSION`／`ORDER_LINE`／`CHECK`／`PAYMENT`／`DAILY_CLOSE`）ごとの主要な状態変化のみを
+   記録し、カラム単位の差分履歴は対象外（必要なら `audit_log` 側で扱う）。書き込みは Transactional
+   Outbox パターン（業務トランザクションと同一トランザクション内で INSERT）。フェーズ1では分析基盤
+   への配信（Kafka／CDC）は持たずテーブル蓄積のみとし、`occurred_at` の月次レンジパーティション
+   （`pg_partman` で自動管理）とする。直近13か月をオンライン参照可能に保持し、それを超えた
+   パーティションは S3互換ストレージへ JSONL でエクスポートしてデタッチ、`04` §10 のデータ保持方針
+   （10年）を経過したらコールドストレージ側でも削除する。
+5. ~~モバイルオーダーの `qr_token` の設計：卓固定トークン＋セッション毎の短命トークンの2層にするか。失効・再発行の運用。~~
+   **解決済み（`04_architecture.md` §1決定表 行5・§7.4）**：2層構成を採用。`dining_table.qr_token`
+   は卓に印刷される固定トークンで、店舗設定画面から手動再発行可能（再発行時は旧トークンを即時
+   無効化）。読み取り時に対応する `table_session` が `OPEN` であれば `mobile_order_session` を新規
+   発行し、セッション固有の短命 `qr_token`（実体はランダム文字列、有効期限は卓クローズ or 発行から
+   12時間の早い方）をクライアントへ返す。`table_session` が `CLOSED` になると紐づく全
+   `mobile_order_session` を `EXPIRED` にする（4.3）。短命トークンは JWT ではなくサーバ側セッション
+   参照とし、クライアントの `sessionStorage` に保持してリクエストヘッダで送る。
+6. ~~税計算の丸め（会計単位／明細単位）、端数調整（`ROUNDING` ディスカウント）の扱い。~~
+   **解決済み（`04_architecture.md` §1決定表 行6・§6.4）**：消費税額は `check_tax_line` の税区分
+   （`STANDARD_10`／`REDUCED_8`）ごとに、対象額合計へ税率を乗じたうえで**1会計につき1回だけ**端数
+   処理する（インボイス制度の「1請求書につき税率ごとに1回」に対応）。**明細単位では税額を計算・
+   表示しない**（合計金額の突合ズレ回避）。端数処理方式は**切り捨て**（`store_setting.tax_rounding`
+   の既定値 `FLOOR`。`CEIL`／`ROUND` へ店舗別に変更する余地は列として残すが、フェーズ1のUIでは
+   変更不可＝固定運用）。現金精算等で生じる1円未満の調整は `check_discount(type = 'ROUNDING')` と
+   して明示的に記録する。
+7. ~~`receipt` の適格請求書レイアウトと PDF 生成方式（サーバ生成／テンプレート）。~~
+   **解決済み（`04_architecture.md` §1決定表 行7・§6.5）**：**PDF 生成方式**はサーバサイド生成で確定。
+   **openhtmltopdf**（`org.xhtmlrenderer:openhtmltopdf-pdfbox`）で Thymeleaf の HTML テンプレートから
+   直接 PDF バイト列を生成する（外部プロセス起動なし。wkhtmltopdf 等の外部バイナリ依存は避ける。
+   ドキュメントPDF化で用いた wkhtmltopdf 方式は開発ドキュメント用途に限定）。生成 PDF は
+   オブジェクトストレージ（本番ホスティング確定後に選定、開発中はローカル or MinIO で代替）に保存し
+   `receipt.pdf_ref` にキーを保持する。`receipt` は発行時点の適格請求書登録番号
+   （`invoice_reg_no_snap`）と税区分別内訳（`tax_lines_snap` JSONB）をスナップショットで持つ。
+   **適格請求書の具体レイアウト**（記載項目の配置・様式）は、上記テンプレートの実装詳細として
+   実装時に確定する。
+8. ~~`staff` と `user` の一体化度合い（打刻のみの非ログインスタッフを許容するか）。~~
+   **解決済み（`04_architecture.md` §1決定表 行8・§4.9）**：`03` の設計（`staff` は `user` と
+   0..1:1、`staff.user_id` は nullable）をそのまま確定し、一体化（`staff.user_id` を NOT NULL 化、
+   または `user` への人事列統合）は採らない。
+   - **非ログインスタッフの許容**：システムにログインしないスタッフ（入れ替わりの多いホール・キッチンの
+     アルバイト等）は `staff.user_id IS NULL` の行として登録する。email・パスワード・2要素認証は不要で、
+     名前・時給・役割だけでシフトと打刻の対象にできる。
+   - **ログイン要否の切り分け**：レジ・会計・設定変更などシステム操作を行う役割（店長、社員）だけ
+     `user` を作成し `staff.user_id` で紐付ける。勤怠・シフト系（`time_clock`／`shift_request`／
+     `shift_assignment`／`staff_availability`）はすべて `staff_id` を参照するため、非ログインでも
+     打刻・シフトは完結する。
+   - **役割（a）**：`user.role`（enum: OWNER/MANAGER/HALL/KITCHEN/PARTTIME）は権限、`staff.role`
+     （自由文字列）は勤怠・シフト画面でのポジション表示ラベル、と役割を分けて両方残す。統合しない。
+   - **表示名（b）**：勤怠・シフト画面の表示名は `staff.name` を正とする。`user.name` はアカウント
+     表示用。
+   - **多重度（c）**：フェーズ1では 1 `user` = 1 `staff`（同一店舗）に限定する。1人が複数店舗の
+     `staff` 行を持つ多店舗兼務はフェーズ2以降。
+   - **`staff` を持たない `user`（d）**：本部の `OWNER` など勤怠対象でない `user` は `staff` 行を
+     作らなくてよい（許容）。逆向き（`staff` あり `user` なし）が非ログインスタッフ。
+   - **打刻の本人確認（e）**：非ログインスタッフの打刻UIは「店舗共有端末のスタッフ一覧から選択」のみ
+     とする。PIN 等の個人認証（`staff` への `clock_pin` 列追加など）はフェーズ2以降。打刻の修正は
+     従来どおりログインユーザーが行い `time_clock.corrected_by` に記録する。
+   - 監査ログの `actor` は `user_id` or SYSTEM のままで、非ログインスタッフは `actor` に登場しない。
+9. ~~売上日報の「客数」「組数」の定義（`table_session.party_size` の合計／`table_session` 件数）。~~
+   **解決済み（`04_architecture.md` §1決定表 行9・§4.8）**：以下で確定。スキーマ変更は不要
+   （既存の `sales_daily_report.guest_count`／`group_count`／`avg_per_guest_jpy` で足りる）。
+   - **集計母集団**：`status = CLOSED` かつ `FINALIZED` の `check` を1件以上持つ `table_session`。
+     卓を開けただけ（オーダーゼロ）でクローズしたセッション、全 `check` を `VOIDED` にして退店した
+     セッション（無銭飲食）、予約 `NO_SHOW`（そもそも `table_session` が生成されない）は、客数・組数の
+     いずれにも含めない。全額サービス（100%割引で `total_jpy = 0` でも `FINALIZED`）は実来店として
+     含める。回収不能分は `domain_event`（監査）にのみ記録する。
+   - **営業日への帰属**：セッション単位ではなく、紐づく `check.business_date`（＝精算日）で日報の営業日に
+     割り当てる。これにより「その営業日に計上される売上」と「その営業日にカウントされる客数」が同じキーで
+     揃う。1セッションの `check` が締めをまたいで別営業日に分かれた場合は、そのセッションの客数・組数を
+     **最後に `FINALIZED` した `check` の `business_date`** に寄せる（フェーズ1では稀）。
+   - **客数（`guest_count`）**：上記母集団の `table_session.party_size` の合計。`party_size` は
+     `INTEGER NOT NULL` のため NULL 混入はない。
+   - **組数（`group_count`）**：上記母集団の `table_session` 件数。卓の結合・分割を経た場合は、
+     **結合・分割後の最終的な `table_session` 単位**で数える（1物理来店＝最終セッション1件）。
+     フェーズ1は会計開始後の分割を対象外にしているため実害は小さい。
+   - **`party_size` 変更のタイミング**：締め実行時点の `party_size` 現在値で確定する（変更履歴は持たない）。
+   - **客単価（`avg_per_guest_jpy`）**：分子は `sales_total_jpy` と同一定義（当該 `business_date` の
+     `FINALIZED` な `check.total_jpy` の合計。税込・割引後・返金控除前、`VOIDED` は除外）。分母は
+     `guest_count`。`guest_count = 0` のときは `0` を格納。端数は四捨五入。`ROUNDING` ディスカウントは
+     `total_jpy` に反映済みのため追加処理は不要。組単価は算出しない。
+   - **時間帯別（`sales_report_by_hour`）**：売上額は明細・会計の時刻で複数の時間バケットに分散するが、
+     客数はセッション単位のため分割せず、`table_session.opened_at`（着席時刻）の時間帯に来店客
+     （`party_size`）をまとめて計上する。
+   - **D2 遅延計上とのズレ**：端末が日次締めをまたいでオフラインだった結果、前営業日の来店客の一部明細が
+     翌営業日に遅延同期（未決事項3・D2）した場合、その客数は前営業日に計上済みだが、売上は翌営業日の
+     `sales_total_jpy` に載る。このズレは許容し、`daily_close` の再オープンや客数の遡及計上は行わない。
+     フェーズ1では `sales_daily_report` に遅延計上分の内数列・フラグ列を追加せず、遅延計上額が必要に
+     なったら `order_line` の「前営業日からの遅延計上」フラグから集計で導出する。日報上の表示方法
+     （内数・脚注など）は D2 の決定どおり実装スパイク送りのままとする。締めをまたいで着席し続けた
+     セッションは売上・客数とも `check.business_date` 側に載るため、このズレは生じない。
+10. ~~`menu_option_*`・`course` をフェーズ1に含めるか（現状 `S`）。含めない場合、`order_line.note` で代替。~~
+    **解決済み（`04_architecture.md` §1決定表 行10・§4.4）**：`menu_option_group`／`menu_option`／
+    `order_line_option`／`course` をいずれも**フェーズ1に含める**。居酒屋業態でコース・飲み放題・
+    トッピングは頻出機能であり、実装コストがテーブル追加のみで小さいため。`course` の中核機能
+    （予約時のコース指定 FR-C01/C03、開始時刻記録・ラストオーダー通知 FR-E05）は既に `M` であり、
+    `course` を落とす選択肢は実質存在しない。含める前提で以下を確定する。
+    - **オプションの適用範囲（a）**：FR-D05 どおり「価格差分つきの簡易オプション」に限定する。商品
+      （`menu_item`）固有のオプション群を **2階層（`menu_option_group` → `menu_option`）** だけ持ち、
+      `min_select`／`max_select` で必須選択・上限を表現する。多段ネスト（オプションが別のオプション群を
+      呼ぶ）、オプション単位の在庫・売り切れ（`menu_option` に `SOLD_OUT` は持たない）、オプションに
+      よる調理・KDS の分岐、条件付き価格（数量割引・組み合わせ割引）はいずれもフェーズ2以降。
+    - **店舗共有オプション群（b）**：`menu_option_group.menu_item_id` は nullable のまま残すが、
+      フェーズ1は**商品固有オプションのみ運用**する（実質 `menu_item_id` 必須）。「全ドリンク共通の
+      氷抜き」等の店舗共有オプション群はフェーズ2以降とし、当面 UI で作らせない。
+    - **`course` と明細の関係（c）**：`course` はセッション単位で1つ（`table_session.course_id`）。
+      会計は**コース料金1行**（`course.price_jpy` × 人数、または1行×数量）だけを計上し、コース構成品は
+      **通常の `order_line`（単価0円）** として1品ずつ登録する。提供順の制御は `04` §9 で確定済みの
+      `fire_state`（`HELD`／`FIRED`、既定 `FIRED`）フラグで行い、コース専用の段階（ステップ）構造は
+      持たない——コースの逐次提供もアラカルトの「後で出す」も同じ hold/fire で処理する。各構成品の
+      `prep_type`（`COOK`／`NO_COOK`）は品ごとに従来どおり効く（`NO_COOK` は調理KDS・`kitchen_ticket`
+      の対象外）。コース構成品マスタ（`course_item`）はフェーズ1では持たず、スタッフが注文入力時に
+      構成品を明細として起こす運用とする。
+    - **飲み放題（`type = FREE_DRINK`）の会計（d）**：`course.price_jpy` を人数分計上する。個々の
+      ドリンクは `price_jpy = 0` の `order_line` として記録し（注文数の可視化・在庫用）、無料明細を
+      実際に生成するか否かは実装スパイクで最終化する。
+    - **`order_line.note` の位置づけ（e）**：オプション導入後も `note` は残す。**価格に影響する変更＝
+      オプション、影響しない要望（アレルギー等）＝ `note`**、と役割を分ける。
+    - **ラストオーダー通知（f）**：LO時刻 ＝ `table_session.course_started_at` ＋ `course.duration_min`
+      − `course.last_order_before_min`。LO時刻・終了時刻に `notification` 基盤（`04` §4.10）経由で
+      ホールへ通知し、`table_session.last_order_at` に保持してモバイルオーダーの送信可否
+      （`mobile_order_session` ACTIVE→EXPIRED）判定にも使う。FR-E05 が既に `M` のため項目10で新たに
+      決めることはなく、`course` 採用の確定により実装可能になる、という関係。
+11. **フェーズ2送りで確定（`04_architecture.md` §1決定表 行11）**：本項はフェーズ2構想であり、`04`
+    では物理設計を行わない。下記の方針を維持し、フェーズ2着手時に `04` を物理設計として改訂する。
+    - （フェーズ2構想）顧客の会員登録・テナント単位でのログイン・過去の予約履歴閲覧。
+      `guest`（顧客）エンティティを新設し、`user`（スタッフ）とは別の認証経路とする想定
+      （`company_code + email` の複合UKなど、命名・分離方針は `user` に準拠しつつ検討）。
+      `reservation` には `guest_id`（nullable, FK→`guest`）を追加し、匿名予約（フェーズ1の
+      `guest_name`/`guest_phone`/`guest_email`）とログイン済み顧客の予約を共存させる。
 
 ---
 
