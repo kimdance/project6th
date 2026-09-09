@@ -3,11 +3,11 @@ package com.shopsystem.backend.dto;
 import lombok.Data;
 
 /**
- * 新規テナント登録（サインアップ）リクエスト。
- * accounts.&lt;サービスドメイン&gt; 経由で受け付ける（04_architecture.md §6.1）。
+ * テナント作成リクエスト（フェーズ1は運営者専用。04_architecture.md §6.1）。
+ * company と最初の users（OWNER）を作成する。
  */
 @Data
-public class SignupRequest {
+public class TenantProvisioningRequest {
     private String companyCode;
     private String companyName;
     private String ownerName;

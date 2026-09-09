@@ -1,7 +1,7 @@
 package com.shopsystem.backend.service;
 
 import com.shopsystem.backend.dto.ErrorItem;
-import com.shopsystem.backend.dto.SignupRequest;
+import com.shopsystem.backend.dto.TenantProvisioningRequest;
 import com.shopsystem.backend.entity.Company;
 import com.shopsystem.backend.entity.User;
 import com.shopsystem.backend.exception.BusinessException;
@@ -23,12 +23,13 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 新規テナント登録（サインアップ）。company と最初の users（OWNER）を1トランザクションで作成する。
- * company_code はサブドメインのラベルに使うため DNS ラベル安全な形式に限定する（04_architecture.md §3.1）。
+ * テナント作成。company と最初の users（OWNER）を1トランザクションで作成する。
+ * フェーズ1では運営者専用（呼び出し側で合言葉を検証する。04_architecture.md §6.1）。
+ * company_code はサブドメインのラベルに使うため DNS ラベル安全な形式に限定する（§3.1）。
  */
 @Service
 @RequiredArgsConstructor
-public class SignupService {
+public class TenantProvisioningService {
 
     /** 先頭・末尾・連続のハイフン不可。照合は小文字前提。 */
     private static final Pattern COMPANY_CODE = Pattern.compile("^[a-z0-9]+(-[a-z0-9]+)*$");
@@ -53,7 +54,7 @@ public class SignupService {
     private final MessageSource messageSource;
 
     @Transactional
-    public Company signup(SignupRequest req) {
+    public Company provision(TenantProvisioningRequest req) {
         Locale locale = LocaleContextHolder.getLocale();
         List<ErrorItem> errors = new ArrayList<>();
 
@@ -65,33 +66,33 @@ public class SignupService {
 
         // --- company_code ---
         if (companyCode == null) {
-            errors.add(err(locale, "signup.error.company-code.required", "companyCode"));
+            errors.add(err(locale, "tenant.error.company-code.required", "companyCode"));
         } else if (!isValidCompanyCode(companyCode)) {
-            errors.add(err(locale, "signup.error.company-code.format", "companyCode"));
+            errors.add(err(locale, "tenant.error.company-code.format", "companyCode"));
         } else if (RESERVED_COMPANY_CODES.contains(companyCode)) {
-            errors.add(err(locale, "signup.error.company-code.reserved", "companyCode"));
+            errors.add(err(locale, "tenant.error.company-code.reserved", "companyCode"));
         }
 
         // --- 会社名・氏名 ---
         if (companyName == null) {
-            errors.add(err(locale, "signup.error.company-name.required", "companyName"));
+            errors.add(err(locale, "tenant.error.company-name.required", "companyName"));
         }
         if (ownerName == null) {
-            errors.add(err(locale, "signup.error.owner-name.required", "ownerName"));
+            errors.add(err(locale, "tenant.error.owner-name.required", "ownerName"));
         }
 
         // --- メールアドレス ---
         if (ownerEmail == null) {
-            errors.add(err(locale, "signup.error.owner-email.required", "ownerEmail"));
+            errors.add(err(locale, "tenant.error.owner-email.required", "ownerEmail"));
         } else if (!EMAIL.matcher(ownerEmail).matches()) {
-            errors.add(err(locale, "signup.error.owner-email.format", "ownerEmail"));
+            errors.add(err(locale, "tenant.error.owner-email.format", "ownerEmail"));
         }
 
         // --- パスワード ---
         if (password == null || password.length() < PASSWORD_MIN) {
-            errors.add(err(locale, "signup.error.password.length", "password"));
+            errors.add(err(locale, "tenant.error.password.length", "password"));
         } else if (!PASSWORD_ALNUM.matcher(password).matches()) {
-            errors.add(err(locale, "signup.error.password.format", "password"));
+            errors.add(err(locale, "tenant.error.password.format", "password"));
         }
 
         if (!errors.isEmpty()) {
@@ -101,7 +102,7 @@ public class SignupService {
         // 形式チェックを通過してから一意性を確認する（409）。
         if (companyRepository.existsByCompanyCode(companyCode)) {
             throw new ConflictException(
-                    messageSource.getMessage("signup.error.company-code.duplicate", null, locale));
+                    messageSource.getMessage("tenant.error.company-code.duplicate", null, locale));
         }
 
         Company company = new Company();

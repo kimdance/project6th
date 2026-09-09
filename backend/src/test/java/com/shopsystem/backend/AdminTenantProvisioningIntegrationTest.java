@@ -8,20 +8,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.shopsystem.backend.entity.Company;
 import com.shopsystem.backend.repository.CompanyRepository;
 import com.shopsystem.backend.repository.UserRepository;
+import com.shopsystem.backend.security.OperatorTokenGuard;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.operator.provision-token=test-operator-secret")
 @Import(TestcontainersConfiguration.class)
 @AutoConfigureMockMvc
-class SignupIntegrationTest {
+class AdminTenantProvisioningIntegrationTest {
+
+    private static final String TOKEN = "test-operator-secret";
 
     @Autowired
     MockMvc mvc;
@@ -38,6 +42,13 @@ class SignupIntegrationTest {
         companyRepository.deleteAllInBatch();
     }
 
+    private MockHttpServletRequestBuilder createTenant(String json) {
+        return post("/api/v1/admin/tenants")
+                .header(OperatorTokenGuard.HEADER, TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json);
+    }
+
     @Test
     void 正常系_companyとowner作成_companyCodeとemailは小文字化_パスワードはハッシュ化() throws Exception {
         String body = """
@@ -45,7 +56,7 @@ class SignupIntegrationTest {
                  "ownerEmail":"Owner@Example.com","password":"secret123"}
                 """;
 
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(createTenant(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.companyCode").value("acme-izakaya"));
 
@@ -63,19 +74,42 @@ class SignupIntegrationTest {
     }
 
     @Test
+    void 合言葉なしは403() throws Exception {
+        String body = """
+                {"companyCode":"no-token-co","companyName":"会社","ownerName":"氏名",
+                 "ownerEmail":"a@example.com","password":"secret123"}
+                """;
+        mvc.perform(post("/api/v1/admin/tenants").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        assertThat(companyRepository.count()).isZero();
+    }
+
+    @Test
+    void 合言葉が不一致は403() throws Exception {
+        String body = """
+                {"companyCode":"wrong-token-co","companyName":"会社","ownerName":"氏名",
+                 "ownerEmail":"a@example.com","password":"secret123"}
+                """;
+        mvc.perform(post("/api/v1/admin/tenants")
+                        .header(OperatorTokenGuard.HEADER, "not-the-secret")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        assertThat(companyRepository.count()).isZero();
+    }
+
+    @Test
     void 会社コードが重複したら409() throws Exception {
         String body = """
                 {"companyCode":"dup-co","companyName":"最初の会社","ownerName":"一人目",
                  "ownerEmail":"first@example.com","password":"secret123"}
                 """;
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated());
+        mvc.perform(createTenant(body)).andExpect(status().isCreated());
 
         String body2 = """
                 {"companyCode":"DUP-CO","companyName":"あとから来た会社","ownerName":"二人目",
                  "ownerEmail":"second@example.com","password":"secret123"}
                 """;
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body2))
+        mvc.perform(createTenant(body2))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errors[0].message").isNotEmpty());
 
@@ -88,7 +122,7 @@ class SignupIntegrationTest {
                 {"companyCode":"bad_code","companyName":"会社","ownerName":"氏名",
                  "ownerEmail":"a@example.com","password":"secret123"}
                 """;
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(createTenant(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].fields[0]").value("companyCode"));
 
@@ -101,18 +135,18 @@ class SignupIntegrationTest {
                 {"companyCode":"admin","companyName":"会社","ownerName":"氏名",
                  "ownerEmail":"a@example.com","password":"secret123"}
                 """;
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(createTenant(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].fields[0]").value("companyCode"));
     }
 
     @Test
-    void パスワードが短いと400_複数エラーをまとめて返す() throws Exception {
+    void 複数の入力エラーをまとめて返す() throws Exception {
         String body = """
                 {"companyCode":"x","companyName":"","ownerName":"",
                  "ownerEmail":"not-an-email","password":"short"}
                 """;
-        mvc.perform(post("/api/v1/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(createTenant(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.length()").value(5));
     }

@@ -29,4 +29,11 @@ public class GlobalExceptionHandler {
         ErrorItem item = new ErrorItem(e.getMessage(), List.of());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(List.of(item)));
     }
+
+    /** 権限不足・合言葉不一致 → 403。 */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException e) {
+        ErrorItem item = new ErrorItem(e.getMessage(), List.of());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(List.of(item)));
+    }
 }
