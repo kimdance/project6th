@@ -25,7 +25,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * GET /api/v1/auth/tenant・POST /api/v1/auth/login・POST /api/v1/auth/refresh の結合テスト
- * （04_architecture.md §6.1／§6.3）。ログイン失敗ロック・セッションタイムアウトは対象外（後回し）。
+ * （04_architecture.md §6.1／§6.3）。ログイン失敗ロック（FR-A08）は {@link AuthLoginLockIntegrationTest}
+ * で扱う。セッションタイムアウト（FR-A09）は対象外（後回し）。
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)

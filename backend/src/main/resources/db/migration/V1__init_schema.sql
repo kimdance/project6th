@@ -108,6 +108,10 @@ CREATE TABLE users (
     status             VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('ACTIVE','LOCKED','INVITED')),
     two_factor_enabled BOOLEAN      NOT NULL DEFAULT false,
+    -- ログイン失敗の連続回数による一時ロック（FR-A08）。上限到達で status='LOCKED' ＋
+    -- locked_until を設定し、locked_until 経過後の次回アクセスでアプリ層が自動解除する。
+    failed_login_count INTEGER      NOT NULL DEFAULT 0,
+    locked_until        TIMESTAMPTZ,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     created_by  VARCHAR(255) NOT NULL,
     updated_at  TIMESTAMPTZ,

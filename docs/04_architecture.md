@@ -6,6 +6,15 @@
 - **ステータス**: **フェーズ1向け凍結（2026-09-09）**。`03` 第7章の未決事項12件は全件解決。以降の変更はフェーズ1スコープ内の誤り訂正・実装スパイク結果の反映に限る（残る先送り項目は §15）。
   - 2026-09-09 追補：ログイン時のテナント指定を「画面入力の `company_code`」から「URLサブドメイン＋サーバ側セッション」へ改訂（`02_requirements.md` FR-A02/A02a/A02b）。影響範囲は §2・§3.1・§3.2・§6.1・§6.2・§6.3。物理スキーマは、`company_code` をサブドメインラベルに使うため §4.3 の `company.company_code` を `VARCHAR(20)` から `VARCHAR(63)` に拡張し、形式 `CHECK`（`ck_company_code_format`）を追加。非正規化コピー列（`menu_category`・`menu_item`・`reservation`・`table_session`・`staff_device`・`audit_log`・`domain_event`）の `company_code` も `VARCHAR(63)` に統一。`V1__init_schema.sql` は未適用のため直接反映。
   - 2026-09-09 追補（テナント作成）：フェーズ1のテナント作成は**運営者専用**とし（`02` §3.1「運営者＝テナント作成」に整合）、合言葉付きの `POST /api/v1/admin/tenants`（ヘッダ `X-Operator-Token` を `app.operator.provision-token` と照合。未設定なら機能オフ）で受け付ける。公開のセルフサービス・サインアップ（`accounts.<サービスドメイン>` の申込フォーム）とメール到達確認・レート制限・運営者コンソールはフェーズ2。§6.1／§6.2／§6.3 を改訂。
+  - 2026-09-11 追補（ログイン・一時ロック）：§6.1／§6.3 のとおり `GET /api/v1/auth/tenant`・
+    `POST /api/v1/auth/login`・`POST /api/v1/auth/refresh` を実装。JWTの署名鍵・有効期限は
+    `app.jwt.*`（`access-token-minutes=15`／`refresh-token-days=14`）で設定する。あわせて FR-A08
+    （連続ログイン失敗の一時ロック）を実装し、`users` に `failed_login_count INTEGER`／
+    `locked_until TIMESTAMPTZ` を追加（`V1__init_schema.sql` は未適用のため直接反映）。しきい値・
+    ロック時間は `app.auth.max-failed-attempts`（既定5）／`app.auth.lock-duration-minutes`（既定15）で
+    設定し、専用のロック解除バッチは持たず、ロック中ユーザーへの次回アクセス時にアプリ層
+    （`AuthService`）が期限切れを判定して自動解除する。セッションの無操作タイムアウト（FR-A09）は
+    引き続きフェーズ1未着手。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

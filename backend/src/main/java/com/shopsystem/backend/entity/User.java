@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import java.time.LocalDateTime;
+
 /**
  * ログインアカウント。docs/04_architecture.md §4.3 の users テーブルに対応。
  *
@@ -62,4 +64,11 @@ public class User extends BaseEntity {
 
     @Column(name = "two_factor_enabled", nullable = false)
     private boolean twoFactorEnabled = false;
+
+    /** ログイン失敗の連続回数によるロック（FR-A08）。しきい値到達で status=LOCKED ＋ lockedUntil を設定する。 */
+    @Column(name = "failed_login_count", nullable = false)
+    private int failedLoginCount = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
 }
