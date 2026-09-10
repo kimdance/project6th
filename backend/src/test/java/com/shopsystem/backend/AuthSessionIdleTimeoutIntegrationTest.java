@@ -32,7 +32,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class AuthSessionIdleTimeoutIntegrationTest {
 
     private static final String HOST = "idle-test-co.localhost";
-    private static final String EMAIL = "owner@example.com";
+    private static final String OWNER_EMAIL = "owner@example.com";
+    private static final String HALL_EMAIL = "hall@example.com";
     private static final String PASSWORD = "secret123";
 
     @Autowired
@@ -59,11 +60,20 @@ class AuthSessionIdleTimeoutIntegrationTest {
         User owner = new User();
         owner.setCompany(company);
         owner.setName("オーナー");
-        owner.setEmail(EMAIL);
+        owner.setEmail(OWNER_EMAIL);
         owner.setPassword(passwordEncoder.encode(PASSWORD));
         owner.setRole("OWNER");
         owner.setStatus("ACTIVE");
         userRepository.save(owner);
+
+        User hallStaff = new User();
+        hallStaff.setCompany(company);
+        hallStaff.setName("ホールスタッフ");
+        hallStaff.setEmail(HALL_EMAIL);
+        hallStaff.setPassword(passwordEncoder.encode(PASSWORD));
+        hallStaff.setRole("HALL");
+        hallStaff.setStatus("ACTIVE");
+        userRepository.save(hallStaff);
     }
 
     @AfterEach
@@ -73,15 +83,23 @@ class AuthSessionIdleTimeoutIntegrationTest {
     }
 
     @Test
-    void 無操作時間が上限を超えたリフレッシュは拒否される() throws Exception {
-        String refreshToken = loginAndExtractRefreshToken();
+    void オーナーは無操作時間が上限を超えるとリフレッシュを拒否される() throws Exception {
+        String refreshToken = loginAndExtractRefreshToken(OWNER_EMAIL);
 
         // idle-timeout-minutes=0 のため、ログイン直後の1回目のリフレッシュで即座にタイムアウト扱いになる。
         mvc.perform(refresh(refreshToken)).andExpect(status().isUnauthorized());
     }
 
-    private String loginAndExtractRefreshToken() throws Exception {
-        String body = objectMapper.writeValueAsString(new LoginPayload(EMAIL, PASSWORD));
+    @Test
+    void 現場スタッフはタイムアウト対象外でリフレッシュできる() throws Exception {
+        String refreshToken = loginAndExtractRefreshToken(HALL_EMAIL);
+
+        // idle-timeout-minutes=0 でも、HALL はオフライン注文の運用（§9）と衝突するため対象外。
+        mvc.perform(refresh(refreshToken)).andExpect(status().isOk());
+    }
+
+    private String loginAndExtractRefreshToken(String email) throws Exception {
+        String body = objectMapper.writeValueAsString(new LoginPayload(email, PASSWORD));
         String response = mvc.perform(post("/api/v1/auth/login")
                         .header("Host", HOST)
                         .contentType(MediaType.APPLICATION_JSON)

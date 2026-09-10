@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * サブドメインから解決したテナント情報の参照とログイン・トークン更新（04_architecture.md §6.1）。
@@ -35,7 +36,9 @@ import java.util.Optional;
  * ロック解除はバッチ処理を持たず、ロック中のユーザーへの次回アクセス時にアプリ層で判定する。
  * ログイン・リフレッシュ成功のたびに最終操作時刻を更新し、
  * {@link SessionProperties#getIdleTimeoutMinutes()} 分操作がなければ次のリフレッシュを
- * 拒否して再ログインを求める（FR-A09）。
+ * 拒否して再ログインを求める（FR-A09）。対象は {@link #ROLES_SUBJECT_TO_IDLE_TIMEOUT} の
+ * ロールのみで、現場スタッフ（HALL／KITCHEN／PARTTIME）はオフライン注文の運用（§9）と
+ * 衝突するため対象外とする。
  */
 @Service
 @RequiredArgsConstructor
@@ -43,6 +46,9 @@ public class AuthService {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_LOCKED = "LOCKED";
+
+    /** 無操作セッションタイムアウト（FR-A09）の対象ロール。現場スタッフは対象外（理由は下記参照）。 */
+    private static final Set<String> ROLES_SUBJECT_TO_IDLE_TIMEOUT = Set.of("OWNER", "MANAGER");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -133,8 +139,17 @@ public class AuthService {
         return new LoginResponse(jwtService.issueAccessToken(user), refreshToken, "Bearer");
     }
 
-    /** 最終操作時刻からの経過が設定を超えていれば無操作タイムアウトとみなす（FR-A09）。 */
+    /**
+     * 最終操作時刻からの経過が設定を超えていれば無操作タイムアウトとみなす（FR-A09）。
+     * 現場スタッフ（HALL／KITCHEN／PARTTIME）のログインは対象外とする。スタッフ端末はオフライン中に
+     * 注文を貯め込み、オンライン復帰後まとめて送信する運用（§9）があり、オフライン許容時間の上限は
+     * フェーズ1では設けない方針のため、リフレッシュ間隔の空きだけでセッション切れにしてしまうと
+     * この運用と衝突する。設定変更・売上確認等を行う OWNER／MANAGER のみ対象とする。
+     */
     private boolean isSessionIdleTimedOut(User user) {
+        if (!ROLES_SUBJECT_TO_IDLE_TIMEOUT.contains(user.getRole())) {
+            return false;
+        }
         if (user.getLastActiveAt() == null) {
             return false;
         }
