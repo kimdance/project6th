@@ -71,4 +71,8 @@ public class User extends BaseEntity {
 
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
+
+    /** 無操作セッションタイムアウト判定用（FR-A09）。ログイン・リフレッシュ成功のたびに更新する。 */
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
 }

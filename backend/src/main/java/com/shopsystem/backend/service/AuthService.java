@@ -1,6 +1,7 @@
 package com.shopsystem.backend.service;
 
 import com.shopsystem.backend.config.AuthLockProperties;
+import com.shopsystem.backend.config.SessionProperties;
 import com.shopsystem.backend.dto.LoginRequest;
 import com.shopsystem.backend.dto.LoginResponse;
 import com.shopsystem.backend.dto.TenantInfoResponse;
@@ -22,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
@@ -31,7 +33,9 @@ import java.util.Optional;
  * ログイン失敗が連続 {@link AuthLockProperties#getMaxFailedAttempts()} 回に達すると
  * {@link AuthLockProperties#getLockDurationMinutes()} 分の一時ロックを行う（FR-A08）。
  * ロック解除はバッチ処理を持たず、ロック中のユーザーへの次回アクセス時にアプリ層で判定する。
- * セッションの無操作タイムアウト（FR-A09）は対象外（後回しとして合意済み）。
+ * ログイン・リフレッシュ成功のたびに最終操作時刻を更新し、
+ * {@link SessionProperties#getIdleTimeoutMinutes()} 分操作がなければ次のリフレッシュを
+ * 拒否して再ログインを求める（FR-A09）。
  */
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final MessageSource messageSource;
     private final AuthLockProperties authLockProperties;
+    private final SessionProperties sessionProperties;
 
     public TenantInfoResponse currentTenant(HttpServletRequest request) {
         String companyCode = (String) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_CODE);
@@ -85,6 +90,7 @@ public class AuthService {
 
         user.setFailedLoginCount(0);
         user.setLockedUntil(null);
+        user.setLastActiveAt(LocalDateTime.now());
         userRepository.save(user);
 
         return new LoginResponse(
@@ -117,7 +123,23 @@ public class AuthService {
             throw invalidToken();
         }
 
+        if (isSessionIdleTimedOut(user)) {
+            throw sessionExpired();
+        }
+
+        user.setLastActiveAt(LocalDateTime.now());
+        userRepository.save(user);
+
         return new LoginResponse(jwtService.issueAccessToken(user), refreshToken, "Bearer");
+    }
+
+    /** 最終操作時刻からの経過が設定を超えていれば無操作タイムアウトとみなす（FR-A09）。 */
+    private boolean isSessionIdleTimedOut(User user) {
+        if (user.getLastActiveAt() == null) {
+            return false;
+        }
+        Duration idle = Duration.between(user.getLastActiveAt(), LocalDateTime.now());
+        return idle.compareTo(Duration.ofMinutes(sessionProperties.getIdleTimeoutMinutes())) > 0;
     }
 
     /** ロック期限を過ぎていれば ACTIVE へ戻し、失敗回数をリセットする。 */
@@ -159,6 +181,12 @@ public class AuthService {
         Locale locale = LocaleContextHolder.getLocale();
         return new UnauthorizedException(
                 messageSource.getMessage("auth.error.invalid-token", null, locale));
+    }
+
+    private UnauthorizedException sessionExpired() {
+        Locale locale = LocaleContextHolder.getLocale();
+        return new UnauthorizedException(
+                messageSource.getMessage("auth.error.session-expired", null, locale));
     }
 
     private static String normalizeLower(String s) {

@@ -112,6 +112,9 @@ CREATE TABLE users (
     -- locked_until を設定し、locked_until 経過後の次回アクセスでアプリ層が自動解除する。
     failed_login_count INTEGER      NOT NULL DEFAULT 0,
     locked_until        TIMESTAMPTZ,
+    -- 無操作セッションタイムアウト（FR-A09）。ログイン成功・リフレッシュ成功のたびに更新し、
+    -- 一定時間更新がなければ次のリフレッシュを拒否して再ログインを求める。
+    last_active_at      TIMESTAMPTZ,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     created_by  VARCHAR(255) NOT NULL,
     updated_at  TIMESTAMPTZ,

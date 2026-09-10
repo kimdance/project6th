@@ -13,8 +13,14 @@
     `locked_until TIMESTAMPTZ` を追加（`V1__init_schema.sql` は未適用のため直接反映）。しきい値・
     ロック時間は `app.auth.max-failed-attempts`（既定5）／`app.auth.lock-duration-minutes`（既定15）で
     設定し、専用のロック解除バッチは持たず、ロック中ユーザーへの次回アクセス時にアプリ層
-    （`AuthService`）が期限切れを判定して自動解除する。セッションの無操作タイムアウト（FR-A09）は
-    引き続きフェーズ1未着手。
+    （`AuthService`）が期限切れを判定して自動解除する。
+  - 2026-09-11 追補（無操作セッションタイムアウト）：FR-A09 を実装。`users` に
+    `last_active_at TIMESTAMPTZ` を追加し、ログイン成功・`POST /api/v1/auth/refresh` 成功のたびに
+    更新する。`app.session.idle-timeout-minutes`（既定30分）を超えて更新がなければ次のリフレッシュを
+    拒否し、クライアントは `POST /api/v1/auth/login` からの再ログインが必要になる。判定は
+    ユーザー単位（同一ユーザーが複数端末で同時ログインする場合、端末ごとの個別管理はフェーズ2以降）。
+    KDS等の常時表示端末は、アクセストークン（15分）を切らさないための裏側の定期リフレッシュ自体が
+    「操作」とみなされるため、画面が動作し続けている限りタイムアウトしない設計とした。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
