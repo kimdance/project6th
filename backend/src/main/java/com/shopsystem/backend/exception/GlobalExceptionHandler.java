@@ -36,4 +36,18 @@ public class GlobalExceptionHandler {
         ErrorItem item = new ErrorItem(e.getMessage(), List.of());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(List.of(item)));
     }
+
+    /** ログイン失敗・トークン不正 → 401。 */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException e) {
+        ErrorItem item = new ErrorItem(e.getMessage(), List.of());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(List.of(item)));
+    }
+
+    /** サブドメインに対応するテナントが存在しない → 404（存在有無は漏らさない）。 */
+    @ExceptionHandler(TenantNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleTenantNotFound(TenantNotFoundException e) {
+        ErrorItem item = new ErrorItem(e.getMessage(), List.of());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(List.of(item)));
+    }
 }
