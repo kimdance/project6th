@@ -26,6 +26,16 @@
     時間の上限はフェーズ1では設けない）と、リフレッシュ間隔に基づく無操作判定は前提が両立しないため
     （スタッフ端末がオフラインの間はリフレッシュできず、復帰時に無操作扱いで再ログインを強制されて
     しまう）。実装は `AuthService`。
+  - 2026-09-11 追補（ログイン必須APIの関所・店舗設定）：§3.2 の「認証済みリクエストの
+    `TenantContext`」を実装（`JwtAuthenticationInterceptor`）。`/api/v1/stores/**` を対象に
+    `Authorization: Bearer <アクセストークン>` を検証し、クレームから
+    `company_id`／`company_code`／`user_id`／`role`／`store_id` を ThreadLocal の `TenantContext` へ
+    載せる。あわせて「JWTの `companyCode` ＝ サブドメイン」の不一致は401とする（§3.2）。この関所の上に
+    FR-B01（店舗基本情報）・FR-B03（税金設定）を実装：`POST /api/v1/stores`（作成、オーナーのみ）、
+    `GET/PUT /api/v1/stores/{storeId}/settings`（基本情報＋税金設定。閲覧は認証済みなら可、編集は
+    `02` §3.2 の権限マトリクスどおりオーナーは全店・店長は自店のみ、`storeId` が呼び出し元のテナント
+    外なら404）。卓・決済手段・営業日（FR-B02／B04／B05／B07）と、FR-B08／B09（`store_setting` には
+    既に列があるがAPI未実装）は後続で追加する。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

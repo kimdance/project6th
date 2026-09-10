@@ -50,4 +50,11 @@ public class GlobalExceptionHandler {
         ErrorItem item = new ErrorItem(e.getMessage(), List.of());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(List.of(item)));
     }
+
+    /** テナント外・存在しない業務リソース → 404（存在有無は漏らさない）。 */
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException e) {
+        ErrorItem item = new ErrorItem(e.getMessage(), List.of());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(List.of(item)));
+    }
 }
