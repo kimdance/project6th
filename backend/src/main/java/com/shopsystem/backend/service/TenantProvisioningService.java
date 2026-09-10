@@ -12,6 +12,7 @@ import com.shopsystem.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -99,7 +100,8 @@ public class TenantProvisioningService {
             throw new BusinessException(errors);
         }
 
-        // 形式チェックを通過してから一意性を確認する（409）。
+        // 形式チェックを通過してから一意性を確認する（409）。事前チェックと登録の間の競合は
+        // DB の UNIQUE 制約が最終防衛線となるため、saveAndFlush で即座に検出して409へ変換する。
         if (companyRepository.existsByCompanyCode(companyCode)) {
             throw new ConflictException(
                     messageSource.getMessage("tenant.error.company-code.duplicate", null, locale));
@@ -109,7 +111,12 @@ public class TenantProvisioningService {
         company.setCompanyCode(companyCode);
         company.setName(companyName);
         company.setContractStatus("ACTIVE");
-        company = companyRepository.save(company);
+        try {
+            company = companyRepository.saveAndFlush(company);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(
+                    messageSource.getMessage("tenant.error.company-code.duplicate", null, locale));
+        }
 
         User owner = new User();
         owner.setCompany(company);
