@@ -36,6 +36,20 @@
     `02` §3.2 の権限マトリクスどおりオーナーは全店・店長は自店のみ、`storeId` が呼び出し元のテナント
     外なら404）。卓・決済手段・営業日（FR-B02／B04／B05／B07）と、FR-B08／B09（`store_setting` には
     既に列があるがAPI未実装）は後続で追加する。
+  - 2026-09-11 追補（卓・決済手段・営業日）：FR-B02・FR-B04・FR-B05・FR-B07 を実装。
+    `dining_table`／`payment_method_config`／`store_business_day` にエンティティ・リポジトリを追加
+    （物理スキーマは既存のまま。DDLの `weekday SMALLINT` に合わせ Java 型は `Short` とする）。
+    権限・テナント判定は `StoreAccessGuard` に共通化（`StoreService` もこれを使うよう改修）。
+    - `GET/POST /api/v1/stores/{storeId}/tables`・`PUT .../tables/{tableId}`：卓番号は店舗内一意
+      （重複は409）、`qr_token` はサーバがランダム発番しクライアントの自己申告は認めない。
+    - `GET /api/v1/stores/{storeId}/payment-methods`・`PUT .../payment-methods/{methodType}`：
+      `method_type` は固定4種（`CASH`／`PAYPAY`／`CREDIT_CARD`／`RAKUTEN_PAY`）で未設定でも一覧に
+      既定値（無効）で含める。接続情報（`credential`）は `CredentialCryptoService`
+      （`spring-security-crypto` の `Encryptors.stronger`、鍵は `app.crypto.secret`／`app.crypto.salt`）
+      で暗号化してのみ保存し、平文はレスポンスに含めない（`hasCredential` の真偽のみ返す）。
+      リクエストの `credential` が未指定なら既存値を保持、空文字なら削除する。
+    - `GET /api/v1/stores/{storeId}/business-days`・`PUT .../business-days/weekly`（曜日ごとの既定を
+      全置換）・`POST/DELETE .../business-days/exceptions[/{id}]`（特定日の臨時休業・特別営業）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

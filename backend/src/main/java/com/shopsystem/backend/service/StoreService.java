@@ -8,8 +8,6 @@ import com.shopsystem.backend.dto.StoreSettingsResponse;
 import com.shopsystem.backend.entity.Store;
 import com.shopsystem.backend.entity.StoreSetting;
 import com.shopsystem.backend.exception.BusinessException;
-import com.shopsystem.backend.exception.ForbiddenException;
-import com.shopsystem.backend.exception.NotFoundException;
 import com.shopsystem.backend.repository.CompanyRepository;
 import com.shopsystem.backend.repository.StoreRepository;
 import com.shopsystem.backend.repository.StoreSettingRepository;
@@ -41,11 +39,12 @@ public class StoreService {
     private final StoreSettingRepository storeSettingRepository;
     private final CompanyRepository companyRepository;
     private final MessageSource messageSource;
+    private final StoreAccessGuard accessGuard;
 
     @Transactional
     public StoreResponse create(StoreCreateRequest req) {
         TenantContext.Data ctx = TenantContext.get();
-        requireOwner(ctx);
+        accessGuard.requireOwner();
 
         List<ErrorItem> errors = new ArrayList<>();
         String name = trimToNull(req.getName());
@@ -76,17 +75,15 @@ public class StoreService {
     }
 
     public StoreSettingsResponse getSettings(Long storeId) {
-        TenantContext.Data ctx = TenantContext.get();
-        Store store = loadStoreInTenant(ctx, storeId);
-        StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(this::notFound);
+        Store store = accessGuard.requireStoreInTenant(storeId);
+        StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);
         return toSettingsResponse(store, setting);
     }
 
     @Transactional
     public StoreSettingsResponse updateSettings(Long storeId, StoreSettingsRequest req) {
-        TenantContext.Data ctx = TenantContext.get();
-        Store store = loadStoreInTenant(ctx, storeId);
-        requireCanEdit(ctx, storeId);
+        Store store = accessGuard.requireStoreInTenant(storeId);
+        accessGuard.requireCanEdit(storeId);
 
         List<ErrorItem> errors = new ArrayList<>();
         String name = trimToNull(req.getName());
@@ -111,32 +108,13 @@ public class StoreService {
         store.setSeatCount(req.getSeatCount());
         storeRepository.save(store);
 
-        StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(this::notFound);
+        StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);
         setting.setTaxRounding(taxRounding.toUpperCase(Locale.ROOT));
         setting.setPriceIncludesTax(req.isPriceIncludesTax());
         setting.setInvoiceRegNo(trimToNull(req.getInvoiceRegNo()));
         storeSettingRepository.save(setting);
 
         return toSettingsResponse(store, setting);
-    }
-
-    private Store loadStoreInTenant(TenantContext.Data ctx, Long storeId) {
-        return storeRepository.findByIdAndCompany_Id(storeId, ctx.companyId()).orElseThrow(this::notFound);
-    }
-
-    private void requireOwner(TenantContext.Data ctx) {
-        if (!"OWNER".equals(ctx.role())) {
-            throw forbidden();
-        }
-    }
-
-    /** オーナーは全店、店長は自店のみ編集可。それ以外のロールは編集不可（`02` §3.2）。 */
-    private void requireCanEdit(TenantContext.Data ctx, Long storeId) {
-        boolean allowed = "OWNER".equals(ctx.role())
-                || ("MANAGER".equals(ctx.role()) && storeId.equals(ctx.storeId()));
-        if (!allowed) {
-            throw forbidden();
-        }
     }
 
     private StoreResponse toStoreResponse(Store store) {
@@ -155,16 +133,6 @@ public class StoreService {
     private ErrorItem err(String code, String field) {
         Locale locale = LocaleContextHolder.getLocale();
         return new ErrorItem(messageSource.getMessage(code, null, locale), List.of(field));
-    }
-
-    private NotFoundException notFound() {
-        return new NotFoundException(
-                messageSource.getMessage("store.error.not-found", null, LocaleContextHolder.getLocale()));
-    }
-
-    private ForbiddenException forbidden() {
-        return new ForbiddenException(
-                messageSource.getMessage("store.error.forbidden", null, LocaleContextHolder.getLocale()));
     }
 
     private static String trimToNull(String s) {
