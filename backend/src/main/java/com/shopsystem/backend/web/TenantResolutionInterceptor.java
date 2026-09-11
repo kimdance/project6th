@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpSession;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.Locale;
@@ -32,6 +33,10 @@ public class TenantResolutionInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (CorsUtils.isPreFlightRequest(request)) {
+            // CORSのプリフライト（OPTIONS）はテナント解決の対象外。CorsConfig側でヘッダのみ付与する。
+            return true;
+        }
         String companyCode = extractCompanyCode(request.getHeader("Host"));
         Company company = companyRepository.findByCompanyCode(companyCode)
                 .orElseThrow(TenantNotFoundException::new);
