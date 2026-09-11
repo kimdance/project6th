@@ -3,12 +3,15 @@ package com.shopsystem.backend.controller;
 import com.shopsystem.backend.dto.LoginRequest;
 import com.shopsystem.backend.dto.LoginResponse;
 import com.shopsystem.backend.dto.MeResponse;
+import com.shopsystem.backend.dto.PasswordResetConfirmRequest;
+import com.shopsystem.backend.dto.PasswordResetRequest;
 import com.shopsystem.backend.dto.ProfileUpdateRequest;
 import com.shopsystem.backend.dto.RefreshRequest;
 import com.shopsystem.backend.dto.TenantInfoResponse;
 import com.shopsystem.backend.dto.UserRegisterRequest;
 import com.shopsystem.backend.dto.UserRegisterResponse;
 import com.shopsystem.backend.service.AuthService;
+import com.shopsystem.backend.service.PasswordResetService;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @GetMapping("/tenant")
     public TenantInfoResponse tenant(HttpServletRequest request) {
@@ -74,5 +78,21 @@ public class AuthController {
     @PostMapping("/refresh")
     public LoginResponse refresh(HttpServletRequest request, @RequestBody RefreshRequest body) {
         return authService.refresh(request, body.getRefreshToken());
+    }
+
+    /**
+     * パスワードを忘れた場合のリセットメール送信を申し込む（FR-A04）。ボディは {@code { email }} のみ。
+     * メールアドレスが見つからない場合も含め、常に同じ結果を返す（登録有無を漏らさないため）。
+     */
+    @PostMapping("/password-reset")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void requestPasswordReset(HttpServletRequest request, @RequestBody PasswordResetRequest body) {
+        passwordResetService.requestReset(request, body);
+    }
+
+    /** リンクのトークンと新しいパスワードから、実際にパスワードを再設定する（FR-A04）。 */
+    @PostMapping("/password-reset/confirm")
+    public void confirmPasswordReset(@RequestBody PasswordResetConfirmRequest body) {
+        passwordResetService.confirmReset(body);
     }
 }
