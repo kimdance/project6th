@@ -120,7 +120,7 @@ class StoreSubResourcesIntegrationTest {
 
     @Test
     void オーナーは卓を作成できQRトークンが発行される() throws Exception {
-        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, "1階", true));
+        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, "TABLE", "1階", true));
         mvc.perform(as(owner, post("/api/v1/stores/" + store.getId() + "/tables"))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
@@ -131,7 +131,7 @@ class StoreSubResourcesIntegrationTest {
 
     @Test
     void 卓番号が重複すると409() throws Exception {
-        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, null, true));
+        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, "TABLE", null, true));
         mvc.perform(as(owner, post("/api/v1/stores/" + store.getId() + "/tables"))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated());
@@ -142,7 +142,7 @@ class StoreSubResourcesIntegrationTest {
 
     @Test
     void 現場スタッフは卓を作成できず403() throws Exception {
-        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, null, true));
+        String body = objectMapper.writeValueAsString(new TablePayload("T1", 4, "TABLE", null, true));
         mvc.perform(as(hallStaff, post("/api/v1/stores/" + store.getId() + "/tables"))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isForbidden());
@@ -150,7 +150,7 @@ class StoreSubResourcesIntegrationTest {
 
     @Test
     void 卓の一覧取得と更新ができる() throws Exception {
-        String createBody = objectMapper.writeValueAsString(new TablePayload("T1", 4, null, true));
+        String createBody = objectMapper.writeValueAsString(new TablePayload("T1", 4, "TABLE", null, true));
         String created = mvc.perform(as(owner, post("/api/v1/stores/" + store.getId() + "/tables"))
                         .contentType(MediaType.APPLICATION_JSON).content(createBody))
                 .andReturn().getResponse().getContentAsString();
@@ -160,7 +160,7 @@ class StoreSubResourcesIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].tableNo").value("T1"));
 
-        String updateBody = objectMapper.writeValueAsString(new TablePayload("T1-改", 6, "2階", false));
+        String updateBody = objectMapper.writeValueAsString(new TablePayload("T1-改", 6, "TABLE", "2階", false));
         mvc.perform(as(owner, put("/api/v1/stores/" + store.getId() + "/tables/" + tableId))
                         .contentType(MediaType.APPLICATION_JSON).content(updateBody))
                 .andExpect(status().isOk())
@@ -277,7 +277,7 @@ class StoreSubResourcesIntegrationTest {
                 .andExpect(jsonPath("$.exceptions.length()").value(0));
     }
 
-    private record TablePayload(String tableNo, int seatCount, String area, boolean active) {
+    private record TablePayload(String tableNo, int seatCount, String seatType, String area, boolean active) {
     }
 
     private record PaymentMethodPayload(boolean enabled, String displayName, String credential, String note) {

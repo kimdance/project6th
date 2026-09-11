@@ -31,6 +31,10 @@ public class DiningTable extends BaseEntity {
     @Column(name = "seat_count", nullable = false)
     private int seatCount;
 
+    /** COUNTER（カウンター席）／TABLE（テーブル席）。COUNTER は必ず seatCount=1（TableService）。 */
+    @Column(name = "seat_type", nullable = false, length = 20)
+    private String seatType = "TABLE";
+
     @Column(length = 100)
     private String area;
 

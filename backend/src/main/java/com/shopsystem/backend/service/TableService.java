@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,6 +28,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class TableService {
+
+    private static final Set<String> VALID_SEAT_TYPES = Set.of("COUNTER", "TABLE");
+    private static final String SEAT_TYPE_COUNTER = "COUNTER";
 
     private final DiningTableRepository diningTableRepository;
     private final MessageSource messageSource;
@@ -54,7 +58,8 @@ public class TableService {
         DiningTable table = new DiningTable();
         table.setStore(store);
         table.setTableNo(tableNo);
-        table.setSeatCount(req.getSeatCount());
+        table.setSeatType(req.getSeatType());
+        table.setSeatCount(effectiveSeatCount(req));
         table.setArea(trimToNull(req.getArea()));
         table.setActive(req.isActive());
         table.setQrToken(generateUniqueQrToken(storeId));
@@ -80,7 +85,8 @@ public class TableService {
         }
 
         table.setTableNo(tableNo);
-        table.setSeatCount(req.getSeatCount());
+        table.setSeatType(req.getSeatType());
+        table.setSeatCount(effectiveSeatCount(req));
         table.setArea(trimToNull(req.getArea()));
         table.setActive(req.isActive());
         diningTableRepository.save(table);
@@ -94,6 +100,9 @@ public class TableService {
         if (tableNo == null) {
             errors.add(err("table.error.table-no.required", "tableNo"));
         }
+        if (req.getSeatType() == null || !VALID_SEAT_TYPES.contains(req.getSeatType())) {
+            errors.add(err("table.error.seat-type.invalid", "seatType"));
+        }
         if (req.getSeatCount() < 0) {
             errors.add(err("table.error.seat-count.invalid", "seatCount"));
         }
@@ -101,6 +110,11 @@ public class TableService {
             throw new BusinessException(errors);
         }
         return tableNo;
+    }
+
+    /** カウンター席は1席ずつ卓を分けて登録する運用のため、種類がCOUNTERなら常に1席とする。 */
+    private int effectiveSeatCount(TableRequest req) {
+        return SEAT_TYPE_COUNTER.equals(req.getSeatType()) ? 1 : req.getSeatCount();
     }
 
     private String generateUniqueQrToken(Long storeId) {
@@ -113,7 +127,7 @@ public class TableService {
 
     private TableResponse toResponse(DiningTable table) {
         return new TableResponse(
-                table.getId(), table.getTableNo(), table.getSeatCount(), table.getArea(),
+                table.getId(), table.getTableNo(), table.getSeatCount(), table.getSeatType(), table.getArea(),
                 table.getQrToken(), table.getStatus(), table.isActive());
     }
 

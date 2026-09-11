@@ -10,6 +10,8 @@ public class TableResponse {
     private Long id;
     private String tableNo;
     private int seatCount;
+    /** COUNTER（カウンター席）／TABLE（テーブル席）。 */
+    private String seatType;
     private String area;
     private String qrToken;
     private String status;
