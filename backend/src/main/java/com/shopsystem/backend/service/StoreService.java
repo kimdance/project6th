@@ -74,6 +74,14 @@ public class StoreService {
         return toStoreResponse(store);
     }
 
+    /** 自テナントの店舗一覧（作成済みかどうかの確認用）。閲覧は認証済みであれば可。 */
+    public List<StoreResponse> list() {
+        TenantContext.Data ctx = TenantContext.get();
+        return storeRepository.findByCompany_IdOrderById(ctx.companyId()).stream()
+                .map(this::toStoreResponse)
+                .toList();
+    }
+
     public StoreSettingsResponse getSettings(Long storeId) {
         Store store = accessGuard.requireStoreInTenant(storeId);
         StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom'; // ★useLocationを追加
-import { API_BASE_URL } from '../config';
+import { getTenantApiBaseUrl } from '../config';
 import { TopMessage } from '../components/TopMessage';
 
 interface LoginFormData {
@@ -39,7 +39,7 @@ export const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetch(`${getTenantApiBaseUrl()}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,7 +48,14 @@ export const Login: React.FC = () => {
       });
 
       if (response.ok) {
-        setMessage('ログインに成功しました。');
+        const data: { accessToken: string; refreshToken: string; tokenType: string } =
+          await response.json();
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        navigate('/home');
+        return;
+      } else if (response.status === 404) {
+        setMessage('このサブドメインに対応する会社が見つかりません。URLを確認してください。');
       } else {
         setMessage('ログインIDまたはパスワードが正しくありません。');
       }
@@ -95,6 +102,24 @@ export const Login: React.FC = () => {
             required
             style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
+        </div>
+
+        <div style={{ textAlign: 'right', marginBottom: '15px' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/forgot-password')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#007bff',
+              cursor: 'pointer',
+              padding: 0,
+              fontSize: '13px',
+              textDecoration: 'underline',
+            }}
+          >
+            パスワードをお忘れですか？
+          </button>
         </div>
 
         <button

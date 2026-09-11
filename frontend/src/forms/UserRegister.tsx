@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../config';
+import { getTenantApiBaseUrl } from '../config';
 import { TopMessage } from '../components/TopMessage';
 
 interface ErrorItem {
@@ -12,21 +12,32 @@ interface ApiErrorResponse {
   errors?: ErrorItem[];
 }
 
+/** 登録画面で選べるロール。店長・経営管理者等への昇格は、ログイン後のユーザー編集画面で行う。 */
+const REGISTERABLE_ROLES = [
+  { value: 'HALL', label: 'スタッフ' },
+  { value: 'PARTTIME', label: 'アルバイト' },
+] as const;
+
+/**
+ * 現場スタッフの自己登録画面。
+ * 会社（テナント）はURLサブドメインで確定済みのため入力させない（テナント作成・経営管理者登録は
+ * 運営者がPostmanで行う前提。02_requirements.md §3.1／FR-A02c）。
+ */
 export const UserRegister: React.FC = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    companyCode: '',
     name: '',
     email: '',
     password: '',
     telnumber: '',
+    role: REGISTERABLE_ROLES[0].value as string,
   });
 
   const [messages, setMessages] = useState<string[]>([]);
   const [errorFields, setErrorFields] = useState<string[]>([]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
@@ -42,7 +53,7 @@ export const UserRegister: React.FC = () => {
     setErrorFields([]);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/register`, {
+      const response = await fetch(`${getTenantApiBaseUrl()}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -99,18 +110,6 @@ export const UserRegister: React.FC = () => {
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
-          <label>会社コード:</label>
-          <input
-            type="text"
-            name="companyCode"
-            value={formData.companyCode}
-            onChange={handleChange}
-            required
-            style={getInputStyle('companyCode')}
-          />
-        </div>
-
-        <div style={{ marginBottom: '15px' }}>
           <label>お名前:</label>
           <input
             type="text"
@@ -147,15 +146,33 @@ export const UserRegister: React.FC = () => {
         </div>
 
         <div style={{ marginBottom: '15px' }}>
-          <label>電話番号:</label>
+          <label>電話番号（任意）:</label>
           <input
             type="tel"
             name="telnumber"
             value={formData.telnumber}
             onChange={handleChange}
-            required
             style={getInputStyle('telnumber')}
           />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>役割:</label>
+          <select
+            name="role"
+            value={formData.role}
+            onChange={handleChange}
+            style={getInputStyle('role')}
+          >
+            {REGISTERABLE_ROLES.map((role) => (
+              <option key={role.value} value={role.value}>
+                {role.label}
+              </option>
+            ))}
+          </select>
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+            店長・経営管理者などへの変更は、ログイン後の管理画面から行えます。
+          </p>
         </div>
 
         <button

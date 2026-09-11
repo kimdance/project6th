@@ -2,17 +2,24 @@ package com.shopsystem.backend.controller;
 
 import com.shopsystem.backend.dto.LoginRequest;
 import com.shopsystem.backend.dto.LoginResponse;
+import com.shopsystem.backend.dto.MeResponse;
+import com.shopsystem.backend.dto.ProfileUpdateRequest;
 import com.shopsystem.backend.dto.RefreshRequest;
 import com.shopsystem.backend.dto.TenantInfoResponse;
+import com.shopsystem.backend.dto.UserRegisterRequest;
+import com.shopsystem.backend.dto.UserRegisterResponse;
 import com.shopsystem.backend.service.AuthService;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,6 +36,34 @@ public class AuthController {
     @GetMapping("/tenant")
     public TenantInfoResponse tenant(HttpServletRequest request) {
         return authService.currentTenant(request);
+    }
+
+    /**
+     * ログイン中のユーザー情報（ログイン後の共通トップ画面の表示用）。
+     * {@code Authorization: Bearer <アクセストークン>} が必須（{@code JwtAuthenticationInterceptor}）。
+     */
+    @GetMapping("/me")
+    public MeResponse me() {
+        return authService.currentUser();
+    }
+
+    /**
+     * ログイン中の本人が、自分の氏名・メールアドレス・電話番号を変更する。
+     * ロール・所属店舗はここでは変更できない（経営管理者が「ユーザー管理」画面で行う）。
+     */
+    @PutMapping("/me")
+    public MeResponse updateMe(@RequestBody ProfileUpdateRequest body) {
+        return authService.updateCurrentUser(body);
+    }
+
+    /**
+     * 現場スタッフの自己登録。テナント作成・オーナー登録は運営者がPostmanで行う前提（FR-A02c）。
+     * 会社コードはURLサブドメインから解決するためリクエストボディには含めない。
+     */
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserRegisterResponse register(HttpServletRequest request, @RequestBody UserRegisterRequest body) {
+        return authService.register(request, body);
     }
 
     @PostMapping("/login")
