@@ -31,9 +31,9 @@
     `Authorization: Bearer <アクセストークン>` を検証し、クレームから
     `company_id`／`company_code`／`user_id`／`role`／`store_id` を ThreadLocal の `TenantContext` へ
     載せる。あわせて「JWTの `companyCode` ＝ サブドメイン」の不一致は401とする（§3.2）。この関所の上に
-    FR-B01（店舗基本情報）・FR-B03（税金設定）を実装：`POST /api/v1/stores`（作成、オーナーのみ）、
+    FR-B01（店舗基本情報）・FR-B03（税金設定）を実装：`POST /api/v1/stores`（作成、経営管理者のみ）、
     `GET/PUT /api/v1/stores/{storeId}/settings`（基本情報＋税金設定。閲覧は認証済みなら可、編集は
-    `02` §3.2 の権限マトリクスどおりオーナーは全店・店長は自店のみ、`storeId` が呼び出し元のテナント
+    `02` §3.2 の権限マトリクスどおり経営管理者は全店・店長は自店のみ、`storeId` が呼び出し元のテナント
     外なら404）。卓・決済手段・営業日（FR-B02／B04／B05／B07）と、FR-B08／B09（`store_setting` には
     既に列があるがAPI未実装）は後続で追加する。
   - 2026-09-11 追補（卓・決済手段・営業日）：FR-B02・FR-B04・FR-B05・FR-B07 を実装。
@@ -50,6 +50,128 @@
       リクエストの `credential` が未指定なら既存値を保持、空文字なら削除する。
     - `GET /api/v1/stores/{storeId}/business-days`・`PUT .../business-days/weekly`（曜日ごとの既定を
       全置換）・`POST/DELETE .../business-days/exceptions[/{id}]`（特定日の臨時休業・特別営業）。
+  - 2026-09-11 追補（ログイン中ユーザー情報）：`GET /api/v1/auth/me` を実装。ログイン後の共通トップ
+    画面（「ようこそ ◯◯さん」表示・ロール別メニュー出し分け）向けに、アクセストークンの `userId` から
+    `name`／`role`／`companyName`／`storeId`／`storeName` を返す。`/api/v1/auth/**` は本来 Host由来の
+    `TenantResolutionInterceptor` の対象だが、本エンドポイントのみ除外し `JwtAuthenticationInterceptor`
+    の対象に追加（テナントはJWTから解決するため）。
+  - 2026-09-11 追補（ユーザー登録の方針転換）：FR-A03を「経営管理者によるメール招待」から「現場スタッフ
+    本人の自己登録」に変更し、`POST /api/v1/auth/register` を実装（詳細は §6.1・§6.3）。これに伴い
+    `user_invitation` エンティティ・テーブル、`users.status` の `INVITED` を廃止（`02_requirements.md`
+    FR-A03、`03_domain_model.md` §2.1）。既存DBの `user_invitation` テーブルおよび
+    `users_status_check` 制約中の `INVITED` は未使用の残置物として残っており、`V1__init_schema.sql`
+    からの削除と開発DBへの反映は別途対応する（対応時は既存データへの影響を要確認）。
+  - 2026-09-11 追補（ホーム画面メニューのテーブル化）：ログイン後の共通トップ画面に並べる機能の
+    入口を、フロント直書き（`features.ts`）からDB管理に変更した。`app_feature`（1機能＝1行。
+    `feature_key`／`title`／`description`／`path`／`display_order`／`is_active`）と、表示可能ロールを
+    持つ中間テーブル `app_feature_role`（`app_feature_id`＋`role`の複合PK）を追加
+    （`V2__app_features.sql`。company/store非依存でテナント共通）。名称は既存の `menu_item`
+    （飲食メニュー、§4.4）との衝突を避けて `app_feature` とした。`GET /api/v1/app-features`
+    （`JwtAuthenticationInterceptor` の対象。ログイン中ユーザーのロールで表示可否をサーバ側で
+    絞り込み済みの一覧を返す）を実装し、フロントはこれを呼ぶだけになった。実装は
+    `AppFeature`／`AppFeatureRepository`／`AppFeatureService`／`AppFeatureController`。
+  - 2026-09-11 追補（店舗設定画面・複数店舗対応）：ホーム画面の「店舗設定」カードの実画面を実装。
+    新規テナントはPostmanでの作成時点では `company`＋`users`〈`OWNER`〉のみで `store` を持たないため、
+    `GET /api/v1/stores`（自テナントの店舗一覧。閲覧は認証済みであれば可）を追加し、フロントが
+    「0件なら最初の作成フォーム、1件以上あれば一覧＋各店舗の編集」を出し分けられるようにした
+    （`StoreRepository#findByCompany_IdOrderById`／`StoreService#list`）。バックエンドは元々
+    店舗数の上限を設けていなかった（`StoreService#create` は呼ぶたびに1件作成するだけ）ため、
+    `02` §2.5改訂（フェーズ1も複数店舗対応）に合わせてフロントを「一覧表示＋経営管理者のみ表示される
+    ＋新しい店舗を追加ボタン」に拡張するだけで足りた。新規追加は経営管理者のみ（`accessGuard.requireOwner()`
+    のまま変更なし）、既存店舗の編集は経営管理者（全店）／店長（自店のみ）で従来どおり。店舗作成後は
+    `POST /api/v1/stores` のレスポンスの `id` を使って続けて `GET/PUT .../settings` を呼ぶ。
+    ユーザー登録画面（FR-A03）に店舗選択は追加しない（店舗への割り当ては未実装のユーザー編集画面で
+    行う想定のまま）。
+  - 2026-09-11 追補（表示名変更）：ロール `OWNER` の日本語表示名を「オーナー」から「経営管理者」に
+    変更した（`02_requirements.md` §1.1／§3.1／§3.2）。ロールコード `OWNER` 自体・DBの `CHECK` 制約
+    （`users_role_check`）・JWTのクレーム値・APIの `role` フィールドは変更していない。フロントは
+    `ROLE_LABELS.OWNER`（`src/api/session.ts`）と、登録画面・店舗設定画面の案内文言を修正。
+  - 2026-09-11 追補（ホーム画面メニューの店舗依存フィルタ）：テナント登録直後（経営管理者は作成
+    済みだが店舗は未作成）は「卓」「決済手段」「営業日」を押しても先に進めないため、`app_feature`
+    に `requires_store BOOLEAN`（既定 `false`）を追加し、「店舗設定」以外の3件を `true` にした
+    （`V3__app_feature_requires_store.sql`）。`GET /api/v1/app-features` は、自テナントに店舗が
+    1件も無ければ `requires_store = true` の項目を除外して返す（`AppFeatureService#listForCurrentUser`、
+    `StoreRepository#existsByCompany_Id`）。店舗を1件でも作成すれば、以後は通常どおり全件が対象
+    ロールに表示される。
+  - 2026-09-11 追補（ユーザー管理画面）：ユーザー登録画面（FR-A03）は役割を「スタッフ（HALL）」
+    「アルバイト（PARTTIME）」に限定し店舗も選ばせないため、店長・経営管理者への変更と店舗の割り当てを
+    行う画面が無かった。`GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）・
+    `PUT /api/v1/users/{userId}`（ボディは `{ role, storeId }`。`storeId` は `null` で
+    「店舗未設定（全店）」に戻せる）を実装した（`UserManagementService`／`UserManagementController`）。
+    権限は経営管理者のみで、他ロールは403、テナント外の `userId`・`storeId` は404。
+    経営管理者が0人になる変更（最後の1人を降格）は拒否する（`user.error.last-owner`）。
+    ホーム画面に「ユーザー管理」の入口を追加した（`app_feature.feature_key = 'users'`、
+    `roles = {OWNER}`、`requires_store = false`。`V4__app_feature_user_management.sql`）。
+  - 2026-09-11 追補（パスワードリセット・EXT-03の一部実装）：FR-A04「パスワードを忘れた場合の
+    メール経由リセット」を実装した。`password_reset_token`（`user_id`、`token_hash` ＝生トークンの
+    SHA-256ハッシュ、`expires_at`、`used_at`。`V5__password_reset_token.sql`。派生テーブルのため
+    `created_by`／`updated_by` は持たない）を追加し、`spring-boot-starter-mail` を導入した。
+    `POST /api/v1/auth/password-reset`（ボディ `{ email }`、未認証。テナントはHostヘッダ由来。
+    該当メールが無くても常に `202` を返し登録有無を漏らさない）でトークンを発行しメール送信、
+    `POST /api/v1/auth/password-reset/confirm`（ボディ `{ token, password }`）でパスワードを更新する
+    （`PasswordResetService`）。有効期限は既定30分（`app.password-reset.expiry-minutes`）、
+    メール本文のリンクは `<フロントのベースURL>/reset-password?token=...`
+    （`app.password-reset.frontend-base-url-template`、`%s` に `company_code`）。使用済み・期限切れの
+    トークンは再利用不可。再設定成功時は失敗回数・ロック状態もリセットする（FR-A08と整合）。
+    **開発環境のメール送信は Mailpit（`docker run -d --name mailpit -p 1025:1025 -p 8025:8025
+    axllent/mailpit`）宛のSMTP（`localhost:1025`、認証なし）を使う。送信されたメールは
+    `http://localhost:8025` のWeb UIで確認できる。本番は実際のメール送信サービスへの置き換えが必要
+    （EXT-03、サービス未選定のためこれは別途検討）。バックエンドへ新しい依存関係（`spring-boot-mail`）を
+    追加した場合、`spring-boot:run` の再起動（devtoolsのクラスリロードだけでは新規JARが読み込めない）が
+    必要な点に注意。
+  - 2026-09-11 追補（アカウント設定画面）：ログイン中の本人が自分の氏名・メールアドレス・電話番号を
+    変更できる画面を追加した。ロール・所属店舗はここでは変更できない（経営管理者が「ユーザー管理」
+    画面で行う。§3.2 権限マトリクス「ユーザーの権限変更」と切り分け）。`PUT /api/v1/auth/me`
+    （ボディ `{ name, email, telnumber }`。アクセストークン必須）を追加し、`GET /api/v1/auth/me` の
+    レスポンス（`MeResponse`）にも `email`／`telnumber` を追加した。メールアドレス（ログインID）の
+    重複はテナント内（`company_id + email`）でのみチェックする。JWTのクレームにメールアドレスを
+    含まないため、変更しても再ログインは不要。ホーム画面に「アカウント設定」ボタンを追加した
+    （`app_feature` は使わず、全ロール共通でHome.tsxに直接配置。ログアウトボタンと同様の扱い）。
+  - 2026-09-11 追補（画面のバグ修正：保存時の通信エラーでボタンが固まる）：アカウント設定・店舗設定
+    （作成・編集）・ユーザー管理・パスワード再設定の4画面で、保存ボタン押下後に通信エラー
+    （ログイン切れの401等）が起きると、ローディング状態（「処理中...」）から戻らなくなる不具合を
+    修正した。原因は非同期処理を `try/catch` で囲っておらず、`await` が例外を投げると
+    `setSaving(false)` に到達しないまま止まっていたこと。最初からあったログイン画面と同じ
+    `try/catch/finally` の形に揃え、エラー時も必ずボタンが復帰しメッセージが表示されるようにした。
+  - 2026-09-11 追補（卓（テーブル）画面）：ホーム画面の「卓（テーブル）」カードの実画面を実装した。
+    店舗が複数あれば先に店舗を選ばせ（`GET /api/v1/stores`）、選んだ店舗の卓を
+    `GET/POST/PUT /api/v1/stores/{storeId}/tables[/{tableId}]`（既存API、変更なし）で
+    一覧・作成・編集する。編集ボタンの表示は経営管理者（全店）／店長（自店のみ）に限定するが、
+    閲覧は`TableService`の方針どおり誰でもできる。卓番号の重複は409、他店舗の卓IDは404、
+    QRトークンはサーバ発番のため画面には読み取り専用でも出さない（一覧・編集フォームどちらにも
+    表示しない。将来QRコード自体を表示する画面を作る際に利用する）。
+  - 2026-09-11 追補（卓の席種類）：`dining_table` に `seat_type VARCHAR(20)`（`COUNTER`／`TABLE`、
+    既定 `TABLE`）を追加した（`V6__dining_table_seat_type.sql`）。カウンター席は1席ずつ卓番号を
+    分けて登録する運用のため、`seat_type = COUNTER` の場合は送信された `seatCount` を無視して
+    常に1を保存する（`TableService#effectiveSeatCount`）。フロントも「席種類」をカウンター／
+    テーブルの2択にし、カウンターを選ぶと席数欄が自動で1になり編集不可になる。`seatType` 未指定・
+    不正値は400（`table.error.seat-type.invalid`）。
+  - 2026-09-11 追補（卓画面の改善）：ホーム画面・卓画面の表示名を「卓（テーブル・カウンター）」に
+    変更した（`app_feature`テーブルの`title`を更新。`V7__app_feature_tables_title.sql`）。卓一覧に
+    「席種類で絞り込み」（すべて／テーブル／カウンター）を追加した（フロントの配列フィルタのみ。
+    店舗ごとの卓数が少ないフェーズ1では、専用のAPIクエリパラメータは設けていない）。あわせて、
+    席数入力欄（卓・店舗設定の作成/編集、計3箇所）で「値が0のとき0を表示し続けてバックスペースで
+    消せない（続けて入力すると『02』になる）」不具合を修正：値が0の間だけ入力欄を空欄表示にする
+    一般的な対処に統一した。
+  - 2026-09-11 追補（卓一覧の有効/無効絞り込み・削除方針）：卓一覧に「有効/無効で絞り込み」
+    （すべて／有効のみ／無効のみ）を追加した（席種類の絞り込みと併用可）。あわせて、一覧が
+    ブラウザキャッシュ経由で更新直後に古い内容を表示することがないよう、`authedFetch`
+    （フロント共通のfetchヘルパー）に `cache: 'no-store'` を付けた。卓の**物理削除は導入しない**
+    方針を確定：`dining_table` は将来の注文・卓セッション（§9）から参照される想定のマスタのため、
+    V1冒頭の「論理削除」方針どおり `is_active` の無効化のみで運用する（ユーザーと合意済み）。
+    編集フォームの「有効にする」チェックボックスの説明文（不要と指摘）は削除した。
+  - 2026-09-11 追補（退職（退会）処理）：ユーザー管理画面から、スタッフを退職済みにできる
+    ようにした。`users.status` に `RETIRED` を追加し、招待制廃止でもう使わない `INVITED` は
+    許可値から除いた（`V8__users_retired_status.sql`。`users_status_check` を
+    `ACTIVE`／`LOCKED`／`RETIRED` に更新。既存データに `INVITED` が無いことを確認済み）。
+    `PUT /api/v1/users/{userId}` のボディに `status`（`ACTIVE`／`RETIRED` のみ指定可、`LOCKED`は
+    指定不可）を追加した。ログイン（`AuthService#login`）は `RETIRED` を最優先で判定し、
+    一般的な認証エラーとして即座に拒否する（**失敗回数のカウントアップは行わない**）。これは、
+    連続ログイン失敗による自動ロック（FR-A08）とその期限切れ後の自動 `ACTIVE` 復帰の仕組みに
+    退職済みアカウントが巻き込まれ、いずれ意図せず ACTIVE へ戻ってしまう事故を防ぐため。
+    経営管理者を1人もいなくする退職（役割変更と同様に`user.error.last-owner`で拒否）も防止する。
+    退職者は一覧に残り「[退職済み]」と表示される（物理削除はしない。退職済みチェックを外せば
+    復職＝再ログイン可能に戻せる）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -63,7 +185,7 @@
 
 | # | 論点（`03` 7章） | 決定 | 詳細 |
 |---|------------------|------|------|
-| 1 | `company` と既存 `users` の結合方法 | `company` テーブルを新設し、`company.id`（サロゲートキー）を主キーとする。他の全FK（`store_id`→`store.id` 等）と一貫性を持たせ、`store`・`users`・`user_invitation` に `company_id BIGINT REFERENCES company(id)` を実FKとして追加する。`company` 自身が `company_code`（UK）を持つため、この3テーブルは `company_code` 列を一切持たない（`users.company_code` も削除し、複合UKを `company_id + email` に変更する）。それ以外の業務テーブルの `company_code` 列は非正規化コピー（FK制約なし、`_id`と名付けない）のまま維持する。 | §3.1、§4 |
+| 1 | `company` と既存 `users` の結合方法 | `company` テーブルを新設し、`company.id`（サロゲートキー）を主キーとする。他の全FK（`store_id`→`store.id` 等）と一貫性を持たせ、`store`・`users` に `company_id BIGINT REFERENCES company(id)` を実FKとして追加する。`company` 自身が `company_code`（UK）を持つため、この2テーブルは `company_code` 列を一切持たない（`users.company_code` も削除し、複合UKを `company_id + email` に変更する）。それ以外の業務テーブルの `company_code` 列は非正規化コピー（FK制約なし、`_id`と名付けない）のまま維持する。 | §3.1、§4 |
 | 2 | 卓の結合・分割 | フェーズ1は `table_session_table` による複数卓の**結合（占有）のみ**実装する。分割（会計途中で `order_line` を別セッションへ移送）は**フェーズ2へ送る**（`03` の区分どおり `S`→フェーズ2）。 | §4 |
 | 3 | オフライン同期の競合解決規則 | クライアント一時IDは「**端末ID（サーバがデバイス登録時に発番。`store`短縮コード＋店内連番）＋端末内でグローバルに単調増加する連番**」の合成文字列を、`customer_order`・`order_line`・`order_line_option` の**各レコードの** `client_ref_id`（`VARCHAR(40)`）に持たせ、各テーブルの `UNIQUE(..., client_ref_id)` と `staff_device.last_accepted_seq` で**サブツリー全階層の**冪等性を担保する。同期ペイロードは**フラットなレコード配列＋FK列に一時ID**の形式とし、作り直し参照は `remake_of_line_id`（確定ID）と `remake_of_line_ref`（一時ID、ペイロード専用）に分けて持つ。バッチ内の依存順は**アプリ層のトポロジカルソート**で解決する（DB の遅延制約は使わない）。同期レスポンスは、エンベロープ（`server_received_at`／`last_accepted_seq`）＋送信レコード全件に対応するフラットな `records[]`（`type`／`client_ref_id`／`id`／`status`／任意の `server_fields`・`error`）を返す。クライアント側の一時ID↔確定ID対応表は、対象 `table_session` が `CLOSED` になるまで保持し以後破棄する（バックストップの固定TTL付き）。部分失敗はハイブリッド（サブツリー前提の検証は all-or-nothing、個々の明細検証は部分コミット）で扱い、落ちた明細は `REJECTED`＋`error.code`、その子は `SKIPPED` で返す。`error.code` 付き `REJECTED` は永続的失敗（自動再送せずスタッフへエスカレーション）とし、一時的失敗は 5xx／タイムアウト等で判定してバッチ全体を指数バックオフ再送する。端末の再セットアップ時は端末IDを再発番し、旧IDは再利用しない。オフライン中は**注文明細の新規追加のみ**許可し、数量変更・取消・会計・決済はオンライン復帰後にのみ許可することで、更新競合そのものを設計上発生させない。永続化済み行への更新は `serve_status` の `PENDING→SERVED` を含めオフライン不可とし、`updated_at`／`version` 比較の楽観的ロックでの解禁も採用しない（既存行の更新意図はローカルキューへ退避し復帰後にオンライン操作として再生）。遅延同期が `CLOSED` セッション／`FINALIZED` `check` に着地した場合はフェーズ1では代金回収せず、回収不能（廃棄ロス／サービス提供分）として `domain_event` に記録するのみとする（オフライン許容時間の上限は未決）。オフライン作成明細のメニュースナップショット（名称・価格・税区分）は端末保持のキャッシュ値で確定し、サーバは復帰時に再価格付けしない。オフライン作成レコードの時刻は端末時計＋スキュー補正（リクエストに `client_sent_at` を追加し `offset = server_received_at − client_sent_at` をバッチ内の各時刻へ一律加算）で確定し、補正値は低信頼フラグ付きで格納、時系列的に破綻する時刻のみ `server_received_at` へ置換する。`order_line` に `business_date` 列を追加し、補正後 `registered_at` ＋店舗の営業日境界から算出（低信頼明細は `guest_check.business_date` を継承）。算出先が締め済み営業日なら拒否せずオープン中の営業日へ寄せて理由コード付きで当日計上（D2、`daily_close` は不変のまま）。`offset` 許容上限 `X` はシステム全体の運用設定値（店舗別オーバーライドはフェーズ2以降）とし、格納方式・既定値・レンジは実装スパイクで確定。KDS のチケット表示順は `printed_at` ではなく注文入力時刻（`submitted_at`／`registered_at`、オフラインは補正後）を基準にする。オフライン作成明細はペイロードに `serve_status`／`served_at` を初期状態として載せ（案1）、`kitchen_ticket` は `customer_order` 単位のまま、全明細 `SERVED` のオーダーのみ `status = DONE`・KDS 非表示、`PENDING` を含むオーダーは KDS に出し表示明細を `PENDING` に絞る（G1）。ミュート照合レーンの要否・遅延計上／低信頼フラグの列名は未決。 | §9 |
 | 4 | `domain_event` の粒度・保持方針 | 集約単位（`TABLE_SESSION`/`ORDER_LINE`/`CHECK`/`PAYMENT`/`DAILY_CLOSE`）の主要状態変化のみを記録（列変更の逐一記録はしない）。直近13か月はオンラインテーブル、それ以降は月次パーティションでコールドストレージへ退避し、10年で削除する。 | §8 |
@@ -112,10 +234,10 @@
   - 強制箇所：**アプリ層バリデーション（テナント作成 API `POST /api/v1/admin/tenants`）** で文字種・
     長さ・予約語をすべて検証する。加えて **DB の `CHECK` 制約**（`company.ck_company_code_format`＝
     文字種と長さのみ。予約語はアプリ層のみ）を `V1__init_schema.sql` に含める。
-- `store`・`users`・`user_invitation` は `company` に直接ぶら下がる最上位のテーブルであるため、他の全FK
+- `store`・`users` は `company` に直接ぶら下がる最上位のテーブルであるため、他の全FK
   （`store_id`→`store.id`、`category_id`→`menu_category.id` 等）と一貫性を持たせ、
   `company_id BIGINT NOT NULL REFERENCES company(id)` を実FKとして持つ。`company` 自身が `company_code`
-  （UK）を持つため、この3テーブルに `company_code` 列は一切持たせない。既存 `users.company_code` は
+  （UK）を持つため、この2テーブルに `company_code` 列は一切持たせない。既存 `users.company_code` は
   本書のマイグレーションで `company_id` の追加・バックフィル後に削除する（調査の結果、現時点で
   ログイン機能は未実装〈登録APIのみ〉であり、本番で `company_code` に依存する稼働中の認証フローは
   存在しないため、後方互換のために残す理由はない）。`company_id` 追加前に、既存データに存在する
@@ -129,7 +251,7 @@
   ログインAPIのリクエストボディに `company_code` は含めない（§6.1）。
 - `store` 配下の全業務テーブルは `store_id BIGINT NOT NULL REFERENCES store(id)` を持つ（`user.store_id` のみ
   「全店」を表す `NULL` を許容）。`store_id` が既に `store.company_id` を経由して会社を一意に特定できるため、
-  `store`・`users`・`user_invitation` 以外の業務テーブルには `company_id` を追加しない。
+  `store`・`users` 以外の業務テーブルには `company_id` を追加しない。
 - それ以外の業務テーブル（`menu_category`、`reservation`、`table_session`、`audit_log`、`domain_event` 等）が
   持つ `company_code` 列は、`store_id` から `company` まで複数ホップの結合を経ずにテナント単位の集計・
   インデックスを可能にするための**非正規化列**であり、アプリ層が `company_id`（または `store_id` 経由）から
@@ -253,7 +375,7 @@ ALTER TABLE users
     ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'OWNER'
         CHECK (role IN ('OWNER','MANAGER','HALL','KITCHEN','PARTTIME')),
     ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
-        CHECK (status IN ('ACTIVE','LOCKED','INVITED')),
+        CHECK (status IN ('ACTIVE','LOCKED')),
     ADD COLUMN two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
 -- バックフィル（company_code ごとに対応する company.id を引いて users.company_id に設定）後、以下を実行する：
 -- ALTER TABLE users ALTER COLUMN company_id SET NOT NULL;
@@ -262,18 +384,10 @@ ALTER TABLE users
 -- ALTER TABLE users DROP COLUMN company_code; -- company に company_code(UK) があるため users には持たせない
 -- users.telnumber は既存カラムをそのまま流用。
 
-CREATE TABLE user_invitation (
-    id            BIGINT PK,
-    company_id    BIGINT NOT NULL REFERENCES company(id), -- 低頻度の管理操作のため非正規化せず実FKにする（§3.1）
-    store_id      BIGINT REFERENCES store(id),
-    email         VARCHAR(255) NOT NULL,
-    role          VARCHAR(20) NOT NULL
-        CHECK (role IN ('OWNER','MANAGER','HALL','KITCHEN','PARTTIME')),
-    token         VARCHAR(255) NOT NULL UNIQUE,
-    expires_at    TIMESTAMPTZ NOT NULL,
-    accepted_at   TIMESTAMPTZ
-);
-CREATE INDEX ix_user_invitation_token ON user_invitation(token);
+-- user_invitation は廃止（2026-09-11改訂）。メールによる招待制（FR-A03）をやめ、現場スタッフ本人が
+-- ユーザー登録画面から自己登録する方式に一本化したため、招待トークンの発行・失効という仕組み自体が
+-- 不要になった。既存DBに残る user_invitation テーブルと users_status_check の INVITED は未使用の
+-- 残置物であり、V1__init_schema.sql からの削除は別途対応する（`02_requirements.md` FR-A03）。
 ```
 
 ### 4.4 マスタ（メニュー・卓・コース・決済手段）
@@ -950,15 +1064,21 @@ CREATE TABLE outbound_message (
     DNSラベル形式・予約語・長さ（§3.1）と一意性を検証し、`company` 行と最初の `users` 行
     （`role = OWNER`／`store_id = NULL`）を1トランザクションで作成する。`company_code` と `ownerEmail`
     は小文字化して保存。パスワードは `{bcrypt}` ハッシュで保存。重複 `company_code` は 409。
-  - 作成後、オーナーは `<company_code>.<サービスドメイン>/` からメール＋パスワードでログインする。
+  - 作成後、経営管理者は `<company_code>.<サービスドメイン>/` からメール＋パスワードでログインする。
   - 運営者の実務手順とインポート用の Postman コレクションは `docs/ops/`（`README.md` /
     `tenant-provisioning.postman_collection.json`）に置く。
   - **フェーズ2**：`accounts.<サービスドメイン>`（開発は `accounts.localhost`）上の公開セルフサービス
     サインアップ画面（申込者がフォーム入力）、メール到達確認、レート制限、および運営者コンソール。
     そのときサブドメイン未発行の問題は `accounts.` 固定ホストで回避する（`company` 行が無いため
     `<company_code>` サブドメインは FR-A02a で 404 になる）。
-- 既存テナントへの**招待受諾**（FR-A03）は会社が既に存在するため、その会社のサブドメイン上
-  （`<company_code>.<サービスドメイン>/invitations/<token>/accept`）で受け付ける。
+- 既存テナントへの**現場スタッフの自己登録**（FR-A03）は、その会社のサブドメイン上
+  （`<company_code>.<サービスドメイン>/register`）で受け付ける。会社は既に存在する前提（テナント作成・
+  経営管理者登録は運営者がPostmanで実施済み）で、`POST /api/v1/auth/register` は `TenantResolutionInterceptor`
+  がHostヘッダから解決した `company_id` に紐づけてユーザーを作成する。自己登録できるロールは
+  `HALL`（スタッフ）・`PARTTIME`（アルバイト）のみに制限し、`OWNER`・`MANAGER`・`KITCHEN` は
+  拒否する（未認証で呼べるAPIのため、なりすましによる権限昇格を防ぐ）。店長・経営管理者等への変更は、
+  ログイン後のユーザー編集画面（経営管理者権限）で行う。メールによる招待（トークン発行・失効）は
+  廃止した。
 - モバイルオーダーは未ログインのため JWT を発行しない。代わりに `mobile_order_session` の
   `qr_token` を署名付き短命トークン（JWTではなく単純なランダム文字列＋サーバ側セッション参照）として
   クライアントの `sessionStorage` に保持し、リクエストヘッダで送る。
@@ -984,10 +1104,12 @@ CREATE TABLE outbound_message (
 
 | リソース | メソッド・パス | 対応FR |
 |----------|----------------|--------|
-| 認証 | `GET /api/v1/auth/tenant`（サブドメインからテナント解決。存在時 `{ companyCode, companyName }` を返しセッションに保持、非存在は 404）、`POST /api/v1/auth/login`（ボディは `{ email, password }` のみ）、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/password-reset`（ボディは `{ email }` のみ） | FR-A01, A02, A02a, A02b, A04 |
+| 認証 | `GET /api/v1/auth/tenant`（サブドメインからテナント解決。存在時 `{ companyCode, companyName }` を返しセッションに保持、非存在は 404）、`POST /api/v1/auth/login`（ボディは `{ email, password }` のみ）、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/password-reset`（ボディは `{ email }` のみ。常に202）、`POST /api/v1/auth/password-reset/confirm`（ボディは `{ token, password }`）、`GET /api/v1/auth/me`（ログイン中ユーザー情報。アクセストークン必須）、`PUT /api/v1/auth/me`（本人による氏名・メールアドレス・電話番号の変更。ロール・所属店舗は対象外） | FR-A01, A02, A02a, A02b, A04 |
 | テナント作成（運営者専用） | `POST /api/v1/admin/tenants`（ヘッダ `X-Operator-Token` 必須。ボディは `{ companyCode, companyName, ownerName, ownerEmail, password }`。`company` ＋ 最初の `users`〈`OWNER`〉を作成。重複は 409、合言葉不一致・未設定は 403） | `02` §3.1（運営者＝テナント作成）。公開サインアップはフェーズ2 |
-| 招待 | `POST /api/v1/stores/{storeId}/invitations`、`POST /api/v1/invitations/{token}/accept` | FR-A03 |
-| 店舗設定 | `GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
+| ユーザー登録（現場スタッフの自己登録） | `POST /api/v1/auth/register`（ボディは `{ name, email, password, telnumber?, role }`。`company` はHostヘッダのサブドメインから解決。`role` は `HALL`／`PARTTIME` のみ許可、それ以外は400。重複メールは409） | FR-A03 |
+| ホーム画面メニュー | `GET /api/v1/app-features`（アクセストークン必須。呼び出し元のロールで表示可能な `app_feature` を `display_order` 順で返す。自テナントに店舗が1件も無ければ `requires_store = true` の項目は除外） | — |
+| ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeId, status }`。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
+| 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | `GET/POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`POST /api/v1/public/stores/{storeCode}/reservations`（Web予約・認証不要） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories` | FR-D01〜D05 |
 | 卓・注文 | `POST /api/v1/stores/{storeId}/table-sessions`、`POST .../{id}/orders`、`PATCH .../order-lines/{id}` | FR-E01〜E07 |
