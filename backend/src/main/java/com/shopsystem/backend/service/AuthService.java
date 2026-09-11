@@ -60,6 +60,7 @@ public class AuthService {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_LOCKED = "LOCKED";
+    private static final String STATUS_RETIRED = "RETIRED";
 
     /** 無操作セッションタイムアウト（FR-A09）の対象ロール。現場スタッフは対象外（理由は下記参照）。 */
     private static final Set<String> ROLES_SUBJECT_TO_IDLE_TIMEOUT = Set.of("OWNER", "MANAGER");
@@ -241,6 +242,14 @@ public class AuthService {
         }
 
         User user = userOpt.get();
+
+        // 退職済みアカウントは、ロックの自動解除（＝将来また ACTIVE に戻り得る仕組み）の対象外にする。
+        // ここで即座に一般的な認証エラーとして拒否し、失敗回数のカウントアップも行わない
+        // （でないと、連続失敗でロック→ロック期限切れで自動的に ACTIVE へ戻ってしまいかねない）。
+        if (STATUS_RETIRED.equals(user.getStatus())) {
+            throw invalidCredentials();
+        }
+
         autoUnlockIfExpired(user);
 
         if (STATUS_LOCKED.equals(user.getStatus())) {
