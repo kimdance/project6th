@@ -61,7 +61,7 @@ export const Home = () => {
       <h2>ホーム</h2>
       <p style={{ color: '#333' }}>
         ようこそ、{me.name} さん（{ROLE_LABELS[me.role]}）
-        {me.storeName ? ` / ${me.storeName}` : ''}
+        {me.stores.length > 0 ? ` / ${me.stores.map((s) => s.name).join('・')}` : ''}
       </p>
 
       {features.length > 0 ? (

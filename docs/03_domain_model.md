@@ -46,7 +46,7 @@
 | `company`（テナント） | M | 契約単位。1経営管理者＝1テナント | `id`, `company_code`（テナント識別子, UK）, `name`, `contract_status`（契約状態）, `created_at` |
 | `store`（店舗） | M | 営業拠点。全業務データのスコープ | `id`, `company_id`（テナント識別子, FK）, `name`, `address`, `phone`, `business_hours`（営業時間）, `seat_count`（座席数）, `timezone`（タイムゾーン）, `is_active`（有効フラグ） |
 | `store_setting`（店舗設定） | M | 税・予約・モバイルオーダー等の店舗ポリシー（`store` と 1:1） | `store_id`, `tax_rounding`（税額丸め規則）, `price_includes_tax`（税込価格か）, `invoice_reg_no`（適格請求書登録番号）, `web_reservation_mode`（Web予約受付方式, APPROVAL/INSTANT）, `mobile_order_enabled`（モバイルオーダー有効）, `last_order_default_min`（ラストオーダー既定, 分）, `cancel_charge_default_customer`（客都合キャンセルの既定課金, bool）, `cancel_charge_default_store`（店都合キャンセルの既定課金, bool） |
-| `user`（利用者） | M | ログインユーザー。既存 `users` を継承（`company_id + email` 複合UK） | `id`, `company_id`（テナント識別子, FK）, `store_id`（所属店舗, nullable=全店）, `name`, `email`, `password`(hash), `telnumber`（電話番号）, `role`（権限ロール, OWNER/MANAGER/HALL/KITCHEN/PARTTIME）, `status`（アカウント状態, ACTIVE/LOCKED）, `two_factor_enabled`（2要素認証有効） |
+| `user`（利用者） | M | ログインユーザー。既存 `users` を継承（`company_id + email` 複合UK） | `id`, `company_id`（テナント識別子, FK）, `stores`（所属店舗, `user_store`中間テーブルで多対多。0件=全店。1人が複数店舗を兼任可能。役割は店舗間で共通の1つ。2026-09-12改訂）, `name`, `email`, `password`(hash), `telnumber`（電話番号）, `role`（権限ロール, OWNER/MANAGER/HALL/KITCHEN/PARTTIME）, `status`（アカウント状態, ACTIVE/LOCKED/RETIRED）, `two_factor_enabled`（2要素認証有効） |
 
 > `company` を新設し `id`（サロゲートキー）を主キーとする。`company` から1ホップの直下テーブル
 > （`store`・`user`）は実FKの `company_id` を持つ（詳細は第7章1・`04_architecture.md`）。

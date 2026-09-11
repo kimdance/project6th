@@ -16,6 +16,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * ログイン済みが前提の業務APIの関所（04_architecture.md §3.2）。
  * {@code Authorization: Bearer <アクセストークン>} を検証し、クレームから
@@ -60,9 +64,12 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
         Long companyId = claims.get("companyId", Long.class);
         Long userId = Long.valueOf(claims.getSubject());
         String role = claims.get("role", String.class);
-        Long storeId = claims.get("storeId", Long.class);
+        List<?> rawStoreIds = claims.get("storeIds", List.class);
+        Set<Long> storeIds = rawStoreIds == null
+                ? Set.of()
+                : rawStoreIds.stream().map(id -> ((Number) id).longValue()).collect(Collectors.toSet());
 
-        TenantContext.set(new TenantContext.Data(companyId, companyCodeFromToken, userId, role, storeId));
+        TenantContext.set(new TenantContext.Data(companyId, companyCodeFromToken, userId, role, storeIds));
         return true;
     }
 

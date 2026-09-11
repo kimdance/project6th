@@ -120,7 +120,7 @@ public class TenantProvisioningService {
 
         User owner = new User();
         owner.setCompany(company);
-        owner.setStore(null); // 全店（本部）
+        // 店舗の割り当ては未設定（全店＝本部）のまま。
         owner.setName(ownerName);
         owner.setEmail(ownerEmail);
         owner.setPassword(passwordEncoder.encode(password));

@@ -6,6 +6,8 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * ログインアカウント。docs/04_architecture.md §4.3 の users テーブルに対応。
@@ -36,12 +38,16 @@ public class User extends BaseEntity {
     @EqualsAndHashCode.Exclude
     private Company company;
 
-    /** null = 全店（本部ユーザー等）。 */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "store_id")
+    /** 空 = 全店（本部ユーザー等）。1人が複数店舗を兼任できる（V9）。 */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_store",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "store_id")
+    )
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private Store store;
+    private Set<Store> stores = new HashSet<>();
 
     @Column(nullable = false)
     private String name;

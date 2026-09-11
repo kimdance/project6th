@@ -7,10 +7,10 @@ import com.shopsystem.backend.dto.LoginRequest;
 import com.shopsystem.backend.dto.LoginResponse;
 import com.shopsystem.backend.dto.MeResponse;
 import com.shopsystem.backend.dto.ProfileUpdateRequest;
+import com.shopsystem.backend.dto.StoreRef;
 import com.shopsystem.backend.dto.TenantInfoResponse;
 import com.shopsystem.backend.dto.UserRegisterRequest;
 import com.shopsystem.backend.dto.UserRegisterResponse;
-import com.shopsystem.backend.entity.Store;
 import com.shopsystem.backend.entity.User;
 import com.shopsystem.backend.exception.BusinessException;
 import com.shopsystem.backend.exception.ConflictException;
@@ -148,7 +148,6 @@ public class AuthService {
     }
 
     private MeResponse toMeResponse(User user) {
-        Store store = user.getStore();
         return new MeResponse(
                 user.getId(),
                 user.getName(),
@@ -156,8 +155,9 @@ public class AuthService {
                 user.getTelnumber(),
                 user.getRole(),
                 user.getCompany().getName(),
-                store != null ? store.getId() : null,
-                store != null ? store.getName() : null);
+                user.getStores().stream()
+                        .map(s -> new StoreRef(s.getId(), s.getName()))
+                        .toList());
     }
 
     /**
@@ -207,7 +207,7 @@ public class AuthService {
 
         User user = new User();
         user.setCompany(companyRepository.getReferenceById(companyId));
-        user.setStore(null); // 店舗の割り当てはログイン後のユーザー編集画面で行う（フェーズ1は1テナント1店舗）。
+        // 店舗の割り当てはログイン後のユーザー編集画面で行う（初期状態は所属店舗なし）。
         user.setName(name);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));

@@ -1,6 +1,7 @@
 package com.shopsystem.backend.security;
 
 import com.shopsystem.backend.config.JwtProperties;
+import com.shopsystem.backend.entity.Store;
 import com.shopsystem.backend.entity.User;
 
 import io.jsonwebtoken.Claims;
@@ -18,7 +19,7 @@ import java.util.Date;
 
 /**
  * ログイン（POST /api/v1/auth/login）・更新（POST /api/v1/auth/refresh）で使うJWTの発行・検証。
- * クレームは company_id／company_code／role／store_id（nullable）を含む（04_architecture.md §6.1）。
+ * クレームは company_id／company_code／role／store_ids（配列。0件=全店）を含む（04_architecture.md §6.1）。
  * アクセストークンとリフレッシュトークンは "type" クレームで区別し、用途違いでの流用を防ぐ。
  */
 @Component
@@ -27,7 +28,7 @@ public class JwtService {
     private static final String CLAIM_TYPE = "type";
     private static final String CLAIM_COMPANY_ID = "companyId";
     private static final String CLAIM_COMPANY_CODE = "companyCode";
-    private static final String CLAIM_STORE_ID = "storeId";
+    private static final String CLAIM_STORE_IDS = "storeIds";
     private static final String CLAIM_ROLE = "role";
 
     private static final String TYPE_ACCESS = "access";
@@ -69,12 +70,10 @@ public class JwtService {
                 .claim(CLAIM_COMPANY_ID, user.getCompany().getId())
                 .claim(CLAIM_COMPANY_CODE, user.getCompany().getCompanyCode())
                 .claim(CLAIM_ROLE, user.getRole())
+                .claim(CLAIM_STORE_IDS, user.getStores().stream().map(Store::getId).toList())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
                 .signWith(key);
-        if (user.getStore() != null) {
-            builder.claim(CLAIM_STORE_ID, user.getStore().getId());
-        }
         return builder.compact();
     }
 

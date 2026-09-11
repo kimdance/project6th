@@ -1,5 +1,7 @@
 package com.shopsystem.backend.web;
 
+import java.util.Set;
+
 /**
  * 認証済みリクエストのテナント文脈（04_architecture.md §3.2）。
  * {@link JwtAuthenticationInterceptor} がアクセストークンのクレームから設定し、
@@ -7,8 +9,8 @@ package com.shopsystem.backend.web;
  */
 public final class TenantContext {
 
-    /** storeId は null の場合あり（全店＝本部ユーザー）。 */
-    public record Data(Long companyId, String companyCode, Long userId, String role, Long storeId) {
+    /** storeIds は空集合の場合あり（全店＝本部ユーザー等）。1人が複数店舗を兼任できる（V9）。 */
+    public record Data(Long companyId, String companyCode, Long userId, String role, Set<Long> storeIds) {
     }
 
     private static final ThreadLocal<Data> HOLDER = new ThreadLocal<>();

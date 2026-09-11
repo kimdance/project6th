@@ -30,6 +30,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.util.Set;
+
 /**
  * POST /api/v1/stores・GET/PUT /api/v1/stores/{storeId}/settings の結合テスト（FR-B01・FR-B03）。
  * あわせて JwtAuthenticationInterceptor（04_architecture.md §3.2）の関所としての振る舞いも検証する。
@@ -89,7 +91,7 @@ class StoreSettingsIntegrationTest {
     private User newUser(Company company, String email, String role, Store store) {
         User user = new User();
         user.setCompany(company);
-        user.setStore(store);
+        user.setStores(store == null ? Set.of() : Set.of(store));
         user.setName(role);
         user.setEmail(email);
         user.setPassword("{bcrypt}dummy");

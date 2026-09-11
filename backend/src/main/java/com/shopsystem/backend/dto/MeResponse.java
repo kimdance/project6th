@@ -3,6 +3,8 @@ package com.shopsystem.backend.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * GET /api/v1/auth/me のレスポンス。ログイン後の共通トップ画面（04_architecture.md §6）で
  * 「ようこそ ◯◯さん」の表示と、ロールに応じたメニューの出し分けに使う。
@@ -17,7 +19,6 @@ public class MeResponse {
     /** OWNER / MANAGER / HALL / KITCHEN / PARTTIME（02_requirements.md §3.1）。 */
     private String role;
     private String companyName;
-    /** null = 全店（本部ユーザー等。04_architecture.md §4.3）。 */
-    private Long storeId;
-    private String storeName;
+    /** 空 = 全店（本部ユーザー等）。1人が複数店舗を兼任できる（V9）。 */
+    private List<StoreRef> stores;
 }

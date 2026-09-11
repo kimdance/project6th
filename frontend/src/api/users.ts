@@ -1,5 +1,5 @@
 import { authedFetch, extractErrors, type ErrorItem } from './http';
-import type { Role } from './session';
+import type { Role, StoreRef } from './session';
 
 /** ACTIVE（在籍中）／LOCKED（連続ログイン失敗による一時ロック、自動解除）／RETIRED（退職済み）。 */
 export type UserStatus = 'ACTIVE' | 'LOCKED' | 'RETIRED';
@@ -11,15 +11,14 @@ export interface UserSummary {
   email: string;
   role: Role;
   status: UserStatus;
-  /** null = 全店（未設定）。 */
-  storeId: number | null;
-  storeName: string | null;
+  /** 空配列 = 全店（未設定）。1人が複数店舗を兼任できる。 */
+  stores: StoreRef[];
 }
 
 export interface UserUpdateRequest {
   role: Role;
-  /** null = 全店（未設定）に戻す。 */
-  storeId: number | null;
+  /** 空配列 = 全店（未設定）に戻す。1人が複数店舗を兼任できる。 */
+  storeIds: number[];
   /** ACTIVE（在籍中）／RETIRED（退職済み）のみ指定可。LOCKEDはここでは指定できない。 */
   status: 'ACTIVE' | 'RETIRED';
 }

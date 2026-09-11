@@ -1,6 +1,7 @@
 package com.shopsystem.backend.service;
 
 import com.shopsystem.backend.dto.ErrorItem;
+import com.shopsystem.backend.dto.StoreRef;
 import com.shopsystem.backend.dto.UserSummaryResponse;
 import com.shopsystem.backend.dto.UserUpdateRequest;
 import com.shopsystem.backend.entity.Store;
@@ -18,6 +19,7 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -79,15 +81,17 @@ public class UserManagementService {
             throw new BusinessException(List.of(err(locale, "user.error.last-owner", "role")));
         }
 
-        Store store = null;
-        if (req.getStoreId() != null) {
-            store = storeRepository.findByIdAndCompany_Id(req.getStoreId(), companyId)
+        List<Long> storeIds = req.getStoreIds() == null ? List.of() : req.getStoreIds();
+        Set<Store> stores = new LinkedHashSet<>();
+        for (Long storeId : storeIds) {
+            Store store = storeRepository.findByIdAndCompany_Id(storeId, companyId)
                     .orElseThrow(() -> new NotFoundException(
                             messageSource.getMessage("store.error.not-found", null, locale)));
+            stores.add(store);
         }
 
         user.setRole(role);
-        user.setStore(store);
+        user.setStores(stores);
         user.setStatus(status);
         if ("RETIRED".equals(status)) {
             // ログイン失敗回数によるロック（FR-A08）の解除サイクルで、退職済みアカウントが
@@ -101,11 +105,11 @@ public class UserManagementService {
     }
 
     private UserSummaryResponse toSummary(User user) {
-        Store store = user.getStore();
         return new UserSummaryResponse(
                 user.getId(), user.getName(), user.getEmail(), user.getRole(), user.getStatus(),
-                store != null ? store.getId() : null,
-                store != null ? store.getName() : null);
+                user.getStores().stream()
+                        .map(s -> new StoreRef(s.getId(), s.getName()))
+                        .toList());
     }
 
     private void requireOwner() {

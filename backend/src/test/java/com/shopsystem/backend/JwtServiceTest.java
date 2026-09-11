@@ -14,6 +14,9 @@ import io.jsonwebtoken.JwtException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Set;
+
 class JwtServiceTest {
 
     private JwtProperties properties() {
@@ -35,7 +38,7 @@ class JwtServiceTest {
         User user = new User();
         user.setId(100L);
         user.setCompany(company);
-        user.setStore(store);
+        user.setStores(Set.of(store));
         user.setRole("OWNER");
         return user;
     }
@@ -51,19 +54,19 @@ class JwtServiceTest {
         assertThat(claims.getSubject()).isEqualTo("100");
         assertThat(claims.get("companyId", Long.class)).isEqualTo(1L);
         assertThat(claims.get("companyCode", String.class)).isEqualTo("acme-izakaya");
-        assertThat(claims.get("storeId", Long.class)).isEqualTo(10L);
+        assertThat(claims.get("storeIds", List.class)).containsExactly(10);
         assertThat(claims.get("role", String.class)).isEqualTo("OWNER");
     }
 
     @Test
-    void 店舗未所属ならstoreIdクレームを持たない() {
+    void 店舗未所属なら空のstoreIdsクレームになる() {
         JwtService jwtService = new JwtService(properties());
         User user = userWithStore();
-        user.setStore(null);
+        user.setStores(Set.of());
 
         Claims claims = jwtService.parseAccessToken(jwtService.issueAccessToken(user));
 
-        assertThat(claims.get("storeId")).isNull();
+        assertThat(claims.get("storeIds", List.class)).isEmpty();
     }
 
     @Test

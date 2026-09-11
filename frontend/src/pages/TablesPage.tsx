@@ -93,7 +93,8 @@ export const TablesPage: React.FC = () => {
   }, [navigate]);
 
   const canEditStore = (storeId: number) =>
-    !!me && (me.role === 'OWNER' || (me.role === 'MANAGER' && me.storeId === storeId));
+    !!me &&
+    (me.role === 'OWNER' || (me.role === 'MANAGER' && me.stores.some((s) => s.id === storeId)));
 
   const selectStore = async (storeId: number) => {
     setSelectedStoreId(storeId);

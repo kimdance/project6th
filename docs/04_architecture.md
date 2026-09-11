@@ -172,6 +172,17 @@
     経営管理者を1人もいなくする退職（役割変更と同様に`user.error.last-owner`で拒否）も防止する。
     退職者は一覧に残り「[退職済み]」と表示される（物理削除はしない。退職済みチェックを外せば
     復職＝再ログイン可能に戻せる）。
+  - 2026-09-12 追補（ユーザーの複数店舗兼任）：`users.store_id`（単一・nullable）を廃止し、
+    中間テーブル `user_store(user_id, store_id)` による多対多に変更した（`V9__user_multiple_stores.sql`。
+    既存データは移行のうえ列を削除）。役割（ロール）は従来どおり全店舗共通の1つのままとし、
+    店舗ごとに別ロールは持たせない（店長が複数店舗を兼任する場合、どの店舗でも同じ権限になる）。
+    JWTのクレームは `storeId`（単一）から `storeIds`（配列。空＝全店）に変更し、`TenantContext.storeIds`
+    もこれに合わせた（`JwtService`／`JwtAuthenticationInterceptor`）。店長の編集可否判定
+    （`StoreAccessGuard#requireCanEdit`）は「自店のみ」から「所属店舗のいずれかに含まれるか」に変更。
+    `GET /api/v1/auth/me`・`GET /api/v1/users` のレスポンスは `storeId`／`storeName` の代わりに
+    `stores`（`{ id, name }` の配列）を返す。`PUT /api/v1/users/{userId}` のボディは `storeId` の
+    代わりに `storeIds`（数値配列。空＝全店）を受け取る。ユーザー管理画面は単一選択の `<select>` から
+    店舗ごとのチェックボックスに変更した。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -249,9 +260,10 @@
   `WHERE lower(company_code) = ?`（大文字小文字を区別しない）で検索して `company_id` に変換してから
   使い、`users` テーブルの列としては持たない。
   ログインAPIのリクエストボディに `company_code` は含めない（§6.1）。
-- `store` 配下の全業務テーブルは `store_id BIGINT NOT NULL REFERENCES store(id)` を持つ（`user.store_id` のみ
-  「全店」を表す `NULL` を許容）。`store_id` が既に `store.company_id` を経由して会社を一意に特定できるため、
-  `store`・`users` 以外の業務テーブルには `company_id` を追加しない。
+- `store` 配下の全業務テーブルは `store_id BIGINT NOT NULL REFERENCES store(id)` を持つ。`user` のみ
+  中間テーブル `user_store(user_id, store_id)` により店舗と多対多（1人が複数店舗を兼任可能。§4.3・
+  2026-09-12 追補）で、行が0件なら「全店」を表す。`store_id` が既に `store.company_id` を経由して
+  会社を一意に特定できるため、`store`・`users` 以外の業務テーブルには `company_id` を追加しない。
 - それ以外の業務テーブル（`menu_category`、`reservation`、`table_session`、`audit_log`、`domain_event` 等）が
   持つ `company_code` 列は、`store_id` から `company` まで複数ホップの結合を経ずにテナント単位の集計・
   インデックスを可能にするための**非正規化列**であり、アプリ層が `company_id`（または `store_id` 経由）から
@@ -261,8 +273,9 @@
 
 ### 3.2 アプリ層での強制（フェーズ1で採用する方式）
 
-- 認証済みリクエストのコンテキスト（JWT のクレーム）から `company_id`／`company_code`、ユーザーの `store_id`
-  （`NULL`＝全店）を解決し、リクエストスコープの `TenantContext`（`ThreadLocal` ベース）に保持する。
+- 認証済みリクエストのコンテキスト（JWT のクレーム）から `company_id`／`company_code`、ユーザーの
+  `store_ids`（配列。空＝全店。1人が複数店舗を兼任可能）を解決し、リクエストスコープの
+  `TenantContext`（`ThreadLocal` ベース）に保持する。
 - 未認証リクエスト（ログイン画面の表示・ログイン・パスワードリセット）は JWT を持たないため、テナントは
   **URLサブドメイン**から解決する。`Host` ヘッダ先頭ラベルを `company_code` として（大文字小文字を
   区別せず）`company` を検索し、存在すれば `company_id`／`company_code` をサーバ側セッション
@@ -1051,8 +1064,9 @@ CREATE TABLE outbound_message (
   入力の `email`／`password` で行い、`company_id + email` で `users` を照合する（§3.1）。
 - 認証成功時に JWT（アクセストークン15分 / リフレッシュトークン14日）を発行し、クレームに
   `company_id`、`company_code`（`company_code` 列を持つ業務テーブルのテナントフィルタ用）、
-  `user_id`、`store_id`（nullable）、`role` を含める。以後の認証済みリクエストは §3.2 のとおり JWT を
-  正とし、加えて「JWT の `company_code` ＝ セッション ＝ サブドメイン」の一致を毎リクエスト検証する。
+  `user_id`、`store_ids`（配列。空＝全店。1人が複数店舗を兼任可能）、`role` を含める。以後の認証済み
+  リクエストは §3.2 のとおり JWT を正とし、加えて「JWT の `company_code` ＝ セッション ＝ サブドメイン」
+  の一致を毎リクエスト検証する。
 - パスワードリセット（FR-A04）もサブドメイン配下で行い、入力はメールアドレスのみ（テナントは
   セッションから取得）。
 - **新規テナント作成**：フェーズ1では**公開のセルフサービス登録は行わない**。テナント作成は運営者
@@ -1062,8 +1076,9 @@ CREATE TABLE outbound_message (
     未設定なら受付を常に拒否（機能オフ）、不一致は 403。
   - ボディ `{ companyCode, companyName, ownerName, ownerEmail, password }`。サーバは `company_code` の
     DNSラベル形式・予約語・長さ（§3.1）と一意性を検証し、`company` 行と最初の `users` 行
-    （`role = OWNER`／`store_id = NULL`）を1トランザクションで作成する。`company_code` と `ownerEmail`
-    は小文字化して保存。パスワードは `{bcrypt}` ハッシュで保存。重複 `company_code` は 409。
+    （`role = OWNER`／所属店舗なし＝`user_store` に行を作らない）を1トランザクションで作成する。
+    `company_code` と `ownerEmail` は小文字化して保存。パスワードは `{bcrypt}` ハッシュで保存。
+    重複 `company_code` は 409。
   - 作成後、経営管理者は `<company_code>.<サービスドメイン>/` からメール＋パスワードでログインする。
   - 運営者の実務手順とインポート用の Postman コレクションは `docs/ops/`（`README.md` /
     `tenant-provisioning.postman_collection.json`）に置く。
@@ -1108,7 +1123,7 @@ CREATE TABLE outbound_message (
 | テナント作成（運営者専用） | `POST /api/v1/admin/tenants`（ヘッダ `X-Operator-Token` 必須。ボディは `{ companyCode, companyName, ownerName, ownerEmail, password }`。`company` ＋ 最初の `users`〈`OWNER`〉を作成。重複は 409、合言葉不一致・未設定は 403） | `02` §3.1（運営者＝テナント作成）。公開サインアップはフェーズ2 |
 | ユーザー登録（現場スタッフの自己登録） | `POST /api/v1/auth/register`（ボディは `{ name, email, password, telnumber?, role }`。`company` はHostヘッダのサブドメインから解決。`role` は `HALL`／`PARTTIME` のみ許可、それ以外は400。重複メールは409） | FR-A03 |
 | ホーム画面メニュー | `GET /api/v1/app-features`（アクセストークン必須。呼び出し元のロールで表示可能な `app_feature` を `display_order` 順で返す。自テナントに店舗が1件も無ければ `requires_store = true` の項目は除外） | — |
-| ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeId, status }`。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
+| ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | `GET/POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`POST /api/v1/public/stores/{storeCode}/reservations`（Web予約・認証不要） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories` | FR-D01〜D05 |

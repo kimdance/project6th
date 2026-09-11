@@ -28,11 +28,11 @@ public class StoreAccessGuard {
         return storeRepository.findByIdAndCompany_Id(storeId, ctx.companyId()).orElseThrow(this::notFound);
     }
 
-    /** オーナーは全店、店長は自店のみ編集可。それ以外のロールは編集不可。 */
+    /** オーナーは全店、店長は自分が所属する店舗（複数可）のみ編集可。それ以外のロールは編集不可。 */
     public void requireCanEdit(Long storeId) {
         TenantContext.Data ctx = TenantContext.get();
         boolean allowed = "OWNER".equals(ctx.role())
-                || ("MANAGER".equals(ctx.role()) && storeId.equals(ctx.storeId()));
+                || ("MANAGER".equals(ctx.role()) && ctx.storeIds().contains(storeId));
         if (!allowed) {
             throw forbidden();
         }

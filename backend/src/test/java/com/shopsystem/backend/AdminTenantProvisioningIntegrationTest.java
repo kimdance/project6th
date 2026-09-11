@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = "app.operator.provision-token=test-operator-secret")
 @Import(TestcontainersConfiguration.class)
@@ -50,6 +51,8 @@ class AdminTenantProvisioningIntegrationTest {
     }
 
     @Test
+    @Transactional
+    // owner.getStores() が遅延ロードのため、参照時にセッションが開いている必要がある。
     void 正常系_companyとowner作成_companyCodeとemailは小文字化_パスワードはハッシュ化() throws Exception {
         String body = """
                 {"companyCode":"Acme-Izakaya","companyName":"アクメ居酒屋","ownerName":"山田太郎",
@@ -68,7 +71,7 @@ class AdminTenantProvisioningIntegrationTest {
         assertThat(owner.getName()).isEqualTo("山田太郎");
         assertThat(owner.getRole()).isEqualTo("OWNER");
         assertThat(owner.getStatus()).isEqualTo("ACTIVE");
-        assertThat(owner.getStore()).isNull();
+        assertThat(owner.getStores()).isEmpty();
         assertThat(owner.getPassword()).startsWith("{bcrypt}");
         assertThat(owner.getPassword()).isNotEqualTo("secret123");
     }

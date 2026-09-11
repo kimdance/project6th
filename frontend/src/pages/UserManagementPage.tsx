@@ -7,9 +7,6 @@ import { fetchUsers, updateUser, type UserSummary } from '../api/users';
 
 const EDITABLE_ROLES: Role[] = ['OWNER', 'MANAGER', 'HALL', 'KITCHEN', 'PARTTIME'];
 
-/** 店舗未割り当てを表す値。HTML の <select> は文字列しか扱えないため空文字で表現する。 */
-const NO_STORE_VALUE = '';
-
 type View = 'list' | 'edit';
 
 /**
@@ -27,7 +24,8 @@ export const UserManagementPage: React.FC = () => {
   const [view, setView] = useState<View>('list');
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [editRole, setEditRole] = useState<Role>('HALL');
-  const [editStoreId, setEditStoreId] = useState<string>(NO_STORE_VALUE);
+  /** 兼任する店舗を複数選択できるようにする（空 = 全店・未設定）。 */
+  const [editStoreIds, setEditStoreIds] = useState<number[]>([]);
   const [editRetired, setEditRetired] = useState(false);
 
   const [messages, setMessages] = useState<string[]>([]);
@@ -77,9 +75,15 @@ export const UserManagementPage: React.FC = () => {
     setSuccessMessage('');
     setEditingUser(user);
     setEditRole(user.role);
-    setEditStoreId(user.storeId !== null ? String(user.storeId) : NO_STORE_VALUE);
+    setEditStoreIds(user.stores.map((s) => s.id));
     setEditRetired(user.status === 'RETIRED');
     setView('edit');
+  };
+
+  const toggleEditStore = (storeId: number) => {
+    setEditStoreIds((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId]
+    );
   };
 
   const backToList = () => {
@@ -102,7 +106,7 @@ export const UserManagementPage: React.FC = () => {
     try {
       const result = await updateUser(editingUser.id, {
         role: editRole,
-        storeId: editStoreId === NO_STORE_VALUE ? null : Number(editStoreId),
+        storeIds: editStoreIds,
         status: editRetired ? 'RETIRED' : 'ACTIVE',
       });
       if (result.ok) {
@@ -175,7 +179,9 @@ export const UserManagementPage: React.FC = () => {
               <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
                 {ROLE_LABELS[user.role]}
                 {' ・ '}
-                {user.storeName ?? '店舗未設定（全店）'}
+                {user.stores.length > 0
+                  ? user.stores.map((s) => s.name).join('・')
+                  : '店舗未設定（全店）'}
                 {user.status === 'LOCKED' && (
                   <span style={{ color: '#dc3545' }}> ・ ロック中</span>
                 )}
@@ -205,19 +211,33 @@ export const UserManagementPage: React.FC = () => {
             </select>
           </FormField>
 
-          <FormField label="所属店舗">
-            <select
-              value={editStoreId}
-              onChange={(e) => setEditStoreId(e.target.value)}
-              style={getInputStyle(errorFields, 'storeId')}
+          <FormField label="所属店舗（複数選択可。兼任させたい場合は複数チェック）">
+            <div
+              style={{
+                ...getInputStyle(errorFields, 'storeIds'),
+                padding: '8px 12px',
+              }}
             >
-              <option value={NO_STORE_VALUE}>店舗未設定（全店）</option>
+              {stores.length === 0 && (
+                <span style={{ color: '#666' }}>店舗が登録されていません。</span>
+              )}
               {stores.map((store) => (
-                <option key={store.id} value={store.id}>
+                <label key={store.id} style={{ display: 'block', padding: '4px 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={editStoreIds.includes(store.id)}
+                    onChange={() => toggleEditStore(store.id)}
+                    style={{ marginRight: '8px' }}
+                  />
                   {store.name}
-                </option>
+                </label>
               ))}
-            </select>
+              {editStoreIds.length === 0 && (
+                <p style={{ color: '#666', fontSize: '13px', margin: '4px 0 0' }}>
+                  未選択の場合は「店舗未設定（全店）」として扱われます。
+                </p>
+              )}
+            </div>
           </FormField>
 
           <div style={{ marginBottom: '15px' }}>
