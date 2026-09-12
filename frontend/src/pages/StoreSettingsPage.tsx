@@ -18,6 +18,11 @@ const TAX_ROUNDING_OPTIONS = [
   { value: 'ROUND', label: '四捨五入' },
 ] as const;
 
+const WEB_RESERVATION_MODE_OPTIONS = [
+  { value: 'APPROVAL', label: '承認制（店舗が確定操作をするまで未確定）' },
+  { value: 'INSTANT', label: '即時確定（申込と同時に確定）' },
+] as const;
+
 const EMPTY_CREATE_FORM: StoreCreateRequest = {
   name: '',
   address: '',
@@ -35,6 +40,9 @@ const EMPTY_SETTINGS_FORM: StoreSettingsRequest = {
   taxRounding: 'FLOOR',
   priceIncludesTax: true,
   invoiceRegNo: '',
+  webReservationMode: 'APPROVAL',
+  cancelChargeDefaultCustomer: true,
+  cancelChargeDefaultStore: false,
 };
 
 type View = 'list' | 'create' | 'edit';
@@ -127,6 +135,9 @@ export const StoreSettingsPage: React.FC = () => {
       taxRounding: settings.taxRounding,
       priceIncludesTax: settings.priceIncludesTax,
       invoiceRegNo: settings.invoiceRegNo ?? '',
+      webReservationMode: settings.webReservationMode,
+      cancelChargeDefaultCustomer: settings.cancelChargeDefaultCustomer,
+      cancelChargeDefaultStore: settings.cancelChargeDefaultStore,
     });
     setView('edit');
   };
@@ -431,6 +442,49 @@ export const StoreSettingsPage: React.FC = () => {
                 onChange={(e) => setSettingsForm((prev) => ({ ...prev, invoiceRegNo: e.target.value }))}
                 style={getInputStyle('invoiceRegNo')}
               />
+            </FormField>
+            <FormField label="Web予約の確定方式">
+              <select
+                value={settingsForm.webReservationMode}
+                onChange={(e) => {
+                  setSettingsForm((prev) => ({ ...prev, webReservationMode: e.target.value }));
+                  clearFieldError('webReservationMode');
+                }}
+                style={getInputStyle('webReservationMode')}
+              >
+                {WEB_RESERVATION_MODE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="取消・キャンセル時の請求既定（会計時にスタッフが個別に上書き可）">
+              <label style={{ display: 'block', marginBottom: '6px' }}>
+                <input
+                  type="checkbox"
+                  checked={settingsForm.cancelChargeDefaultCustomer}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      cancelChargeDefaultCustomer: e.target.checked,
+                    }))
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                客都合キャンセルは既定で請求する
+              </label>
+              <label style={{ display: 'block' }}>
+                <input
+                  type="checkbox"
+                  checked={settingsForm.cancelChargeDefaultStore}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({ ...prev, cancelChargeDefaultStore: e.target.checked }))
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                店都合キャンセルは既定で請求する
+              </label>
             </FormField>
             <SubmitButton saving={saving} label="保存する" />
           </form>

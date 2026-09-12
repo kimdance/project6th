@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 public class StoreService {
 
     private static final Pattern TAX_ROUNDING = Pattern.compile("^(FLOOR|CEIL|ROUND)$");
+    private static final Pattern WEB_RESERVATION_MODE = Pattern.compile("^(APPROVAL|INSTANT)$");
 
     private final StoreRepository storeRepository;
     private final StoreSettingRepository storeSettingRepository;
@@ -105,6 +106,11 @@ public class StoreService {
         if (taxRounding == null || !TAX_ROUNDING.matcher(taxRounding.toUpperCase(Locale.ROOT)).matches()) {
             errors.add(err("store.error.tax-rounding.invalid", "taxRounding"));
         }
+        String webReservationMode = trimToNull(req.getWebReservationMode());
+        if (webReservationMode == null
+                || !WEB_RESERVATION_MODE.matcher(webReservationMode.toUpperCase(Locale.ROOT)).matches()) {
+            errors.add(err("store.error.web-reservation-mode.invalid", "webReservationMode"));
+        }
         if (!errors.isEmpty()) {
             throw new BusinessException(errors);
         }
@@ -120,6 +126,9 @@ public class StoreService {
         setting.setTaxRounding(taxRounding.toUpperCase(Locale.ROOT));
         setting.setPriceIncludesTax(req.isPriceIncludesTax());
         setting.setInvoiceRegNo(trimToNull(req.getInvoiceRegNo()));
+        setting.setWebReservationMode(webReservationMode.toUpperCase(Locale.ROOT));
+        setting.setCancelChargeDefaultCustomer(req.isCancelChargeDefaultCustomer());
+        setting.setCancelChargeDefaultStore(req.isCancelChargeDefaultStore());
         storeSettingRepository.save(setting);
 
         return toSettingsResponse(store, setting);
@@ -135,7 +144,9 @@ public class StoreService {
         return new StoreSettingsResponse(
                 store.getId(), store.getName(), store.getAddress(), store.getPhone(),
                 store.getBusinessHours(), store.getSeatCount(),
-                setting.getTaxRounding(), setting.isPriceIncludesTax(), setting.getInvoiceRegNo());
+                setting.getTaxRounding(), setting.isPriceIncludesTax(), setting.getInvoiceRegNo(),
+                setting.getWebReservationMode(), setting.isCancelChargeDefaultCustomer(),
+                setting.isCancelChargeDefaultStore());
     }
 
     private ErrorItem err(String code, String field) {

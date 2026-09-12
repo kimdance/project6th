@@ -145,7 +145,8 @@ class StoreSettingsIntegrationTest {
                 .andExpect(jsonPath("$.taxRounding").value("FLOOR"));
 
         String updateBody = objectMapper.writeValueAsString(
-                new StoreSettingsPayload("本店（改称）", 30, "CEIL", false, "T1234567890123"));
+                new StoreSettingsPayload("本店（改称）", 30, "CEIL", false, "T1234567890123",
+                        "INSTANT", false, true));
         mvc.perform(put("/api/v1/stores/" + storeId + "/settings")
                         .header("Host", HOST)
                         .header("Authorization", "Bearer " + jwtService.issueAccessToken(owner))
@@ -153,12 +154,32 @@ class StoreSettingsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("本店（改称）"))
                 .andExpect(jsonPath("$.taxRounding").value("CEIL"))
-                .andExpect(jsonPath("$.priceIncludesTax").value(false));
+                .andExpect(jsonPath("$.priceIncludesTax").value(false))
+                .andExpect(jsonPath("$.webReservationMode").value("INSTANT"))
+                .andExpect(jsonPath("$.cancelChargeDefaultCustomer").value(false))
+                .andExpect(jsonPath("$.cancelChargeDefaultStore").value(true));
 
         Store persisted = storeRepository.findById(storeId).orElseThrow();
         assertThat(persisted.getSeatCount()).isEqualTo(30);
         StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow();
         assertThat(setting.getInvoiceRegNo()).isEqualTo("T1234567890123");
+        assertThat(setting.getWebReservationMode()).isEqualTo("INSTANT");
+        assertThat(setting.isCancelChargeDefaultCustomer()).isFalse();
+        assertThat(setting.isCancelChargeDefaultStore()).isTrue();
+    }
+
+    @Test
+    void Web予約確定方式が不正なら400() throws Exception {
+        Long storeId = createStoreAndGetId(owner, "本店", 20);
+
+        String body = objectMapper.writeValueAsString(
+                new StoreSettingsPayload("本店", 20, "FLOOR", true, null, "SOMEDAY", true, false));
+        mvc.perform(put("/api/v1/stores/" + storeId + "/settings")
+                        .header("Host", HOST)
+                        .header("Authorization", "Bearer " + jwtService.issueAccessToken(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].fields[0]").value("webReservationMode"));
     }
 
     @Test
@@ -168,7 +189,8 @@ class StoreSettingsIntegrationTest {
         User manager = newUser(company, "manager@example.com", "MANAGER",
                 storeRepository.findById(ownStoreId).orElseThrow());
 
-        String body = objectMapper.writeValueAsString(new StoreSettingsPayload("自店（更新）", 12, "FLOOR", true, null));
+        String body = objectMapper.writeValueAsString(
+                new StoreSettingsPayload("自店（更新）", 12, "FLOOR", true, null, "APPROVAL", true, false));
         mvc.perform(put("/api/v1/stores/" + ownStoreId + "/settings")
                         .header("Host", HOST)
                         .header("Authorization", "Bearer " + jwtService.issueAccessToken(manager))
@@ -242,6 +264,7 @@ class StoreSettingsIntegrationTest {
     }
 
     private record StoreSettingsPayload(
-            String name, int seatCount, String taxRounding, boolean priceIncludesTax, String invoiceRegNo) {
+            String name, int seatCount, String taxRounding, boolean priceIncludesTax, String invoiceRegNo,
+            String webReservationMode, boolean cancelChargeDefaultCustomer, boolean cancelChargeDefaultStore) {
     }
 }

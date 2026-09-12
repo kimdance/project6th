@@ -183,6 +183,15 @@
     `stores`（`{ id, name }` の配列）を返す。`PUT /api/v1/users/{userId}` のボディは `storeId` の
     代わりに `storeIds`（数値配列。空＝全店）を受け取る。ユーザー管理画面は単一選択の `<select>` から
     店舗ごとのチェックボックスに変更した。
+  - 2026-09-12 追補（FR-B08・FR-B09）：`store_setting` に既にあった列（`web_reservation_mode`・
+    `cancel_charge_default_customer`・`cancel_charge_default_store`）を、`GET/PUT
+    /api/v1/stores/{storeId}/settings` のリクエスト・レスポンスに追加した（物理スキーマの変更は
+    不要）。`webReservationMode` は `APPROVAL`（承認制）／`INSTANT`（即時確定）のみ許可し、不正値は
+    400（`store.error.web-reservation-mode.invalid`）。`cancelChargeDefaultCustomer`／
+    `cancelChargeDefaultStore` は真偽値でありバリデーション不要。これでFR-B系（店舗設定）は
+    B06（コース・飲み放題の基本設定。フェーズ1は`S`区分のため未着手）を除き実装済みとなった。
+    店舗設定画面に「Web予約の確定方式」の選択と「取消・キャンセル時の請求既定」のチェックボックス
+    2つを追加した。実装は `StoreSettingsRequest`／`StoreSettingsResponse`／`StoreService`。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

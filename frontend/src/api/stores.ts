@@ -30,6 +30,10 @@ export interface StoreSettings {
   taxRounding: string;
   priceIncludesTax: boolean;
   invoiceRegNo: string | null;
+  /** APPROVAL（承認制） / INSTANT（即時確定） */
+  webReservationMode: string;
+  cancelChargeDefaultCustomer: boolean;
+  cancelChargeDefaultStore: boolean;
 }
 
 /** PUT の送信ボディ。フォームで扱いやすいよう、null は使わず空文字を許容する。 */
@@ -43,6 +47,10 @@ export interface StoreSettingsRequest {
   taxRounding: string;
   priceIncludesTax: boolean;
   invoiceRegNo: string;
+  /** APPROVAL（承認制） / INSTANT（即時確定） */
+  webReservationMode: string;
+  cancelChargeDefaultCustomer: boolean;
+  cancelChargeDefaultStore: boolean;
 }
 
 /** 自テナントの店舗一覧。0件（未作成）または複数件。 */
