@@ -405,6 +405,7 @@ export const StoreSettingsPage: React.FC = () => {
                 style={getInputStyle('seatCount')}
               />
             </FormField>
+            <SectionHeading>税金設定</SectionHeading>
             <FormField label="税額の端数処理">
               <select
                 value={settingsForm.taxRounding}
@@ -443,6 +444,7 @@ export const StoreSettingsPage: React.FC = () => {
                 style={getInputStyle('invoiceRegNo')}
               />
             </FormField>
+            <SectionHeading>予約・キャンセルのルール</SectionHeading>
             <FormField label="Web予約の確定方式">
               <select
                 value={settingsForm.webReservationMode}
@@ -460,34 +462,42 @@ export const StoreSettingsPage: React.FC = () => {
               </select>
             </FormField>
             <FormField label="オーダー提供後に取消・キャンセルしたオーダーの請求について">
-              <label style={{ display: 'block', marginBottom: '6px' }}>
-                <input
-                  type="checkbox"
-                  checked={settingsForm.cancelChargeDefaultCustomer}
-                  onChange={(e) =>
-                    setSettingsForm((prev) => ({
-                      ...prev,
-                      cancelChargeDefaultCustomer: e.target.checked,
-                    }))
-                  }
-                  style={{ marginRight: '8px' }}
-                />
-                お客様都合のキャンセルはデフォルトで請求する
-              </label>
-              <label style={{ display: 'block' }}>
-                <input
-                  type="checkbox"
-                  checked={settingsForm.cancelChargeDefaultStore}
-                  onChange={(e) =>
-                    setSettingsForm((prev) => ({ ...prev, cancelChargeDefaultStore: e.target.checked }))
-                  }
-                  style={{ marginRight: '8px' }}
-                />
-                店舗都合キャンセルはデフォルトで請求する
-              </label>
-              <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
-                ※但し、会計時にスタッフが個別のオーダーに対して請求する・請求しないを指定可能です。
-              </p>
+              <div
+                style={{
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  padding: '10px 12px',
+                }}
+              >
+                <label style={{ display: 'block', marginBottom: '6px' }}>
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.cancelChargeDefaultCustomer}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        cancelChargeDefaultCustomer: e.target.checked,
+                      }))
+                    }
+                    style={{ marginRight: '8px' }}
+                  />
+                  お客様都合のキャンセルはデフォルトで請求する
+                </label>
+                <label style={{ display: 'block' }}>
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.cancelChargeDefaultStore}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({ ...prev, cancelChargeDefaultStore: e.target.checked }))
+                    }
+                    style={{ marginRight: '8px' }}
+                  />
+                  店舗都合キャンセルはデフォルトで請求する
+                </label>
+                <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
+                  ※但し、会計時にスタッフが個別のオーダーに対して請求する・請求しないを指定可能です。
+                </p>
+              </div>
             </FormField>
             <SubmitButton saving={saving} label="保存する" />
           </form>
@@ -507,6 +517,22 @@ const FormField: React.FC<{ label: string; children: React.ReactNode }> = ({ lab
     <label style={{ display: 'block', marginBottom: '5px' }}>{label}:</label>
     {children}
   </div>
+);
+
+/** フォーム内の項目をグループ分けする見出し。項目の境界が分かりにくくなるのを防ぐ。 */
+const SectionHeading: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <h3
+    style={{
+      fontSize: '14px',
+      fontWeight: 700,
+      color: '#333',
+      margin: '24px 0 12px',
+      paddingTop: '16px',
+      borderTop: '1px solid #ddd',
+    }}
+  >
+    {children}
+  </h3>
 );
 
 const SubmitButton: React.FC<{ saving: boolean; label: string }> = ({ saving, label }) => (
