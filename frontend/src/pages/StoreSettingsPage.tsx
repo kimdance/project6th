@@ -459,7 +459,7 @@ export const StoreSettingsPage: React.FC = () => {
                 ))}
               </select>
             </FormField>
-            <FormField label="取消・キャンセル時の請求既定（会計時にスタッフが個別に上書き可）">
+            <FormField label="オーダー提供後に取消・キャンセルしたオーダーの請求について">
               <label style={{ display: 'block', marginBottom: '6px' }}>
                 <input
                   type="checkbox"
@@ -472,7 +472,7 @@ export const StoreSettingsPage: React.FC = () => {
                   }
                   style={{ marginRight: '8px' }}
                 />
-                客都合キャンセルは既定で請求する
+                お客様都合のキャンセルはデフォルトで請求する
               </label>
               <label style={{ display: 'block' }}>
                 <input
@@ -483,8 +483,11 @@ export const StoreSettingsPage: React.FC = () => {
                   }
                   style={{ marginRight: '8px' }}
                 />
-                店都合キャンセルは既定で請求する
+                店舗都合キャンセルはデフォルトで請求する
               </label>
+              <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
+                ※但し、会計時にスタッフが個別のオーダーに対して請求する・請求しないを指定可能です。
+              </p>
             </FormField>
             <SubmitButton saving={saving} label="保存する" />
           </form>
