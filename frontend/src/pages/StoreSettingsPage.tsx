@@ -481,7 +481,7 @@ export const StoreSettingsPage: React.FC = () => {
                     }
                     style={{ marginRight: '8px' }}
                   />
-                  お客様都合のキャンセルは請求する
+                  お客様都合のキャンセルはデフォルトで請求する
                 </label>
                 <label style={{ display: 'block' }}>
                   <input
@@ -492,7 +492,7 @@ export const StoreSettingsPage: React.FC = () => {
                     }
                     style={{ marginRight: '8px' }}
                   />
-                  店舗都合キャンセルは請求する
+                  店舗都合キャンセルはデフォルトで請求する
                 </label>
                 <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
                   ※但し、会計時にスタッフが個別のオーダーに対して請求する・請求しないを変更することができます。
