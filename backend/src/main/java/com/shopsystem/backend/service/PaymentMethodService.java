@@ -36,9 +36,10 @@ public class PaymentMethodService {
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
     private final CredentialCryptoService credentialCryptoService;
+    private final AuditLogService auditLogService;
 
     public List<PaymentMethodResponse> list(Long storeId) {
-        accessGuard.requireStoreInTenant(storeId);
+        accessGuard.requireCanView(storeId);
 
         Map<String, PaymentMethodConfig> existing = new LinkedHashMap<>();
         for (PaymentMethodConfig config : paymentMethodConfigRepository.findAllByStore_Id(storeId)) {
@@ -70,6 +71,7 @@ public class PaymentMethodService {
                     c.setMethodType(type);
                     return c;
                 });
+        String beforeSummary = summarize(type, config);
 
         config.setEnabled(req.isEnabled());
         config.setDisplayName(trimToNull(req.getDisplayName()));
@@ -82,7 +84,20 @@ public class PaymentMethodService {
         }
 
         config = paymentMethodConfigRepository.save(config);
+
+        // 接続情報（credential）は復号せず、設定有無だけを記録する（平文を監査ログに残さない）。
+        auditLogService.recordForCurrentUser(AuditActions.PAYMENT_SETTING_CHANGE, storeId, "PAYMENT_METHOD",
+                config.getId(), beforeSummary, summarize(type, config));
+
         return toResponse(config);
+    }
+
+    private static String summarize(String type, PaymentMethodConfig config) {
+        return "methodType=" + type
+                + ", enabled=" + config.isEnabled()
+                + ", displayName=" + config.getDisplayName()
+                + ", note=" + config.getNote()
+                + ", hasCredential=" + (config.getCredentialEnc() != null);
     }
 
     private PaymentMethodResponse toResponse(PaymentMethodConfig config) {

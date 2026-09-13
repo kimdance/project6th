@@ -84,6 +84,7 @@ public class AuthService {
     private final MessageSource messageSource;
     private final AuthLockProperties authLockProperties;
     private final SessionProperties sessionProperties;
+    private final AuditLogService auditLogService;
 
     public TenantInfoResponse currentTenant(HttpServletRequest request) {
         String companyCode = (String) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_CODE);
@@ -169,6 +170,7 @@ public class AuthService {
     @Transactional
     public UserRegisterResponse register(HttpServletRequest request, UserRegisterRequest body) {
         Long companyId = (Long) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_ID);
+        String companyCode = (String) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_CODE);
         Locale locale = LocaleContextHolder.getLocale();
         List<ErrorItem> errors = new ArrayList<>();
 
@@ -223,6 +225,9 @@ public class AuthService {
                     messageSource.getMessage("user-register.error.email.duplicate", null, locale));
         }
 
+        auditLogService.record(companyCode, null, user.getEmail(),
+                AuditActions.USER_REGISTER, "USER", user.getId(), null, "role=" + user.getRole());
+
         return new UserRegisterResponse(user.getId(), user.getName(), user.getEmail(), user.getRole());
     }
 
@@ -231,6 +236,7 @@ public class AuthService {
     @Transactional(noRollbackFor = UnauthorizedException.class)
     public LoginResponse login(HttpServletRequest request, LoginRequest body) {
         Long companyId = (Long) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_ID);
+        String companyCode = (String) request.getAttribute(TenantResolutionInterceptor.ATTR_COMPANY_CODE);
         String email = normalizeLower(body.getEmail());
 
         Optional<User> userOpt = email == null
@@ -238,6 +244,8 @@ public class AuthService {
                 : userRepository.findByCompany_IdAndEmail(companyId, email);
 
         if (userOpt.isEmpty()) {
+            auditLogService.record(companyCode, null, "unknown:" + email,
+                    AuditActions.LOGIN_FAILURE, "USER", null, null, null);
             throw invalidCredentials();
         }
 
@@ -247,12 +255,16 @@ public class AuthService {
         // ここで即座に一般的な認証エラーとして拒否し、失敗回数のカウントアップも行わない
         // （でないと、連続失敗でロック→ロック期限切れで自動的に ACTIVE へ戻ってしまいかねない）。
         if (STATUS_RETIRED.equals(user.getStatus())) {
+            auditLogService.record(companyCode, null, user.getEmail(),
+                    AuditActions.LOGIN_FAILURE, "USER", user.getId(), null, null);
             throw invalidCredentials();
         }
 
         autoUnlockIfExpired(user);
 
         if (STATUS_LOCKED.equals(user.getStatus())) {
+            auditLogService.record(companyCode, null, user.getEmail(),
+                    AuditActions.LOGIN_FAILURE, "USER", user.getId(), null, null);
             throw locked();
         }
 
@@ -262,6 +274,8 @@ public class AuthService {
 
         if (!passwordOk) {
             registerFailedAttempt(user);
+            auditLogService.record(companyCode, null, user.getEmail(),
+                    AuditActions.LOGIN_FAILURE, "USER", user.getId(), null, null);
             throw STATUS_LOCKED.equals(user.getStatus()) ? locked() : invalidCredentials();
         }
 
@@ -269,6 +283,9 @@ public class AuthService {
         user.setLockedUntil(null);
         user.setLastActiveAt(LocalDateTime.now());
         userRepository.save(user);
+
+        auditLogService.record(companyCode, null, user.getEmail(),
+                AuditActions.LOGIN_SUCCESS, "USER", user.getId(), null, null);
 
         return new LoginResponse(
                 jwtService.issueAccessToken(user),

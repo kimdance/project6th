@@ -54,6 +54,7 @@ public class PasswordResetService {
     private final JavaMailSender mailSender;
     private final PasswordResetProperties properties;
     private final MessageSource messageSource;
+    private final AuditLogService auditLogService;
 
     /**
      * リセットメールの送信を申し込む。会社は未認証のためHostヘッダ由来のセッション（
@@ -151,6 +152,9 @@ public class PasswordResetService {
 
         token.setUsedAt(now);
         tokenRepository.save(token);
+
+        auditLogService.record(user.getCompany().getCompanyCode(), null, user.getEmail(),
+                AuditActions.PASSWORD_CHANGE, "USER", user.getId(), null, null);
     }
 
     private static String sha256Hex(String value) {

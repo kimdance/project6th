@@ -45,6 +45,7 @@ public class UserManagementService {
     private final UserRepository userRepository;
     private final StoreRepository storeRepository;
     private final MessageSource messageSource;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public List<UserSummaryResponse> list() {
@@ -62,6 +63,7 @@ public class UserManagementService {
         Locale locale = LocaleContextHolder.getLocale();
 
         User user = userRepository.findByIdAndCompany_Id(userId, companyId).orElseThrow(this::notFound);
+        String beforeSummary = summarize(user.getRole(), user.getStatus(), user.getStores());
 
         String role = req.getRole();
         if (role == null || !VALID_ROLES.contains(role)) {
@@ -101,7 +103,16 @@ public class UserManagementService {
         }
         userRepository.save(user);
 
+        auditLogService.recordForCurrentUser(AuditActions.PERMISSION_CHANGE, null, "USER", user.getId(),
+                beforeSummary, summarize(user.getRole(), user.getStatus(), user.getStores()));
+
         return toSummary(user);
+    }
+
+    private static String summarize(String role, String status, Set<Store> stores) {
+        String storeNames = stores.stream().map(Store::getName).sorted()
+                .reduce((a, b) -> a + "," + b).orElse("(なし)");
+        return "role=" + role + ", status=" + status + ", stores=" + storeNames;
     }
 
     private UserSummaryResponse toSummary(User user) {

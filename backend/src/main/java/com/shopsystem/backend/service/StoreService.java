@@ -26,8 +26,10 @@ import java.util.regex.Pattern;
 
 /**
  * 店舗の作成・設定編集（FR-B01・FR-B03。04_architecture.md §6.3）。
- * 権限は `02_requirements.md` §3.2 の権限マトリクスに従う：作成はオーナーのみ、設定編集は
- * オーナー（全店）／店長（自店のみ）、それ以外のロールは編集不可（閲覧は認証済みであれば可）。
+ * 権限は `02_requirements.md` §3.2 の権限マトリクスに従う：作成はオーナーのみ、編集は
+ * オーナー（全店）／店長（自店のみ）、それ以外のロールは編集不可。閲覧はオーナー（全店）／
+ * 店長（自店のみ）／それ以外のロール（ホール・キッチン・バイト。テナント内であれば制限なし）
+ * ができる（{@link StoreAccessGuard#requireCanView}）。
  */
 @Service
 @RequiredArgsConstructor
@@ -41,6 +43,7 @@ public class StoreService {
     private final CompanyRepository companyRepository;
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public StoreResponse create(StoreCreateRequest req) {
@@ -75,16 +78,21 @@ public class StoreService {
         return toStoreResponse(store);
     }
 
-    /** 自テナントの店舗一覧（作成済みかどうかの確認用）。閲覧は認証済みであれば可。 */
+    /**
+     * 自テナントの店舗一覧（作成済みかどうかの確認用、店舗選択画面の選択肢）。
+     * オーナー・ホール・キッチン・バイトは全店、店長は自分の所属店舗のみ（複数可）。
+     */
     public List<StoreResponse> list() {
         TenantContext.Data ctx = TenantContext.get();
-        return storeRepository.findByCompany_IdOrderById(ctx.companyId()).stream()
-                .map(this::toStoreResponse)
-                .toList();
+        List<Store> stores = storeRepository.findByCompany_IdOrderById(ctx.companyId());
+        if ("MANAGER".equals(ctx.role())) {
+            stores = stores.stream().filter(s -> ctx.storeIds().contains(s.getId())).toList();
+        }
+        return stores.stream().map(this::toStoreResponse).toList();
     }
 
     public StoreSettingsResponse getSettings(Long storeId) {
-        Store store = accessGuard.requireStoreInTenant(storeId);
+        Store store = accessGuard.requireCanView(storeId);
         StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);
         return toSettingsResponse(store, setting);
     }
@@ -93,6 +101,8 @@ public class StoreService {
     public StoreSettingsResponse updateSettings(Long storeId, StoreSettingsRequest req) {
         Store store = accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanEdit(storeId);
+        StoreSetting existingSetting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);
+        String beforeSummary = summarizeStoreSettings(store, existingSetting);
 
         List<ErrorItem> errors = new ArrayList<>();
         String name = trimToNull(req.getName());
@@ -122,7 +132,7 @@ public class StoreService {
         store.setSeatCount(req.getSeatCount());
         storeRepository.save(store);
 
-        StoreSetting setting = storeSettingRepository.findById(storeId).orElseThrow(accessGuard::notFound);
+        StoreSetting setting = existingSetting;
         setting.setTaxRounding(taxRounding.toUpperCase(Locale.ROOT));
         setting.setPriceIncludesTax(req.isPriceIncludesTax());
         setting.setInvoiceRegNo(trimToNull(req.getInvoiceRegNo()));
@@ -131,7 +141,24 @@ public class StoreService {
         setting.setCancelChargeDefaultStore(req.isCancelChargeDefaultStore());
         storeSettingRepository.save(setting);
 
+        auditLogService.recordForCurrentUser(AuditActions.STORE_SETTING_CHANGE, storeId, "STORE", storeId,
+                beforeSummary, summarizeStoreSettings(store, setting));
+
         return toSettingsResponse(store, setting);
+    }
+
+    private static String summarizeStoreSettings(Store store, StoreSetting setting) {
+        return "name=" + store.getName()
+                + ", address=" + store.getAddress()
+                + ", phone=" + store.getPhone()
+                + ", businessHours=" + store.getBusinessHours()
+                + ", seatCount=" + store.getSeatCount()
+                + ", taxRounding=" + setting.getTaxRounding()
+                + ", priceIncludesTax=" + setting.isPriceIncludesTax()
+                + ", invoiceRegNo=" + setting.getInvoiceRegNo()
+                + ", webReservationMode=" + setting.getWebReservationMode()
+                + ", cancelChargeDefaultCustomer=" + setting.isCancelChargeDefaultCustomer()
+                + ", cancelChargeDefaultStore=" + setting.isCancelChargeDefaultStore();
     }
 
     private StoreResponse toStoreResponse(Store store) {

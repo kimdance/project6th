@@ -37,7 +37,7 @@ public class BusinessDayService {
     private final StoreAccessGuard accessGuard;
 
     public BusinessDaysResponse get(Long storeId) {
-        accessGuard.requireStoreInTenant(storeId);
+        accessGuard.requireCanView(storeId);
 
         List<WeeklyBusinessDayItem> weekly = storeBusinessDayRepository
                 .findAllByStore_IdAndWeekdayIsNotNull(storeId).stream()

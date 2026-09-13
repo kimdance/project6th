@@ -23,7 +23,8 @@ public class WebConfig implements WebMvcConfigurer {
         // ログイン済み前提のAPI（04_architecture.md §3.2）。/api/v1/auth/me もアクセストークン必須。
         registry.addInterceptor(jwtAuthenticationInterceptor)
                 .addPathPatterns(
-                        "/api/v1/stores/**", "/api/v1/auth/me", "/api/v1/app-features", "/api/v1/users/**");
+                        "/api/v1/stores/**", "/api/v1/auth/me", "/api/v1/app-features", "/api/v1/users/**",
+                        "/api/v1/audit-logs/**");
     }
 
     @Override

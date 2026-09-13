@@ -28,6 +28,20 @@ public class StoreAccessGuard {
         return storeRepository.findByIdAndCompany_Id(storeId, ctx.companyId()).orElseThrow(this::notFound);
     }
 
+    /**
+     * 店舗設定・卓・決済手段・営業日の閲覧範囲：オーナーは全店、店長は自分が所属する店舗
+     * （複数可）のみ、それ以外のロール（ホール／キッチン／バイト）は引き続き閲覧可
+     * （編集権限が無いだけで、閲覧はテナント内であれば制限しない従来の方針を維持）。
+     */
+    public Store requireCanView(Long storeId) {
+        Store store = requireStoreInTenant(storeId);
+        TenantContext.Data ctx = TenantContext.get();
+        if ("MANAGER".equals(ctx.role()) && !ctx.storeIds().contains(storeId)) {
+            throw forbidden();
+        }
+        return store;
+    }
+
     /** オーナーは全店、店長は自分が所属する店舗（複数可）のみ編集可。それ以外のロールは編集不可。 */
     public void requireCanEdit(Long storeId) {
         TenantContext.Data ctx = TenantContext.get();

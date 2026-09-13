@@ -13,6 +13,7 @@ import com.shopsystem.backend.entity.Company;
 import com.shopsystem.backend.entity.PaymentMethodConfig;
 import com.shopsystem.backend.entity.Store;
 import com.shopsystem.backend.entity.User;
+import com.shopsystem.backend.repository.AuditLogRepository;
 import com.shopsystem.backend.repository.CompanyRepository;
 import com.shopsystem.backend.repository.DiningTableRepository;
 import com.shopsystem.backend.repository.PaymentMethodConfigRepository;
@@ -66,13 +67,18 @@ class StoreSubResourcesIntegrationTest {
     UserRepository userRepository;
 
     @Autowired
+    AuditLogRepository auditLogRepository;
+
+    @Autowired
     JwtService jwtService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private User owner;
     private User hallStaff;
+    private User manager;
     private Store store;
+    private Store otherStore;
 
     @BeforeEach
     void setUp() {
@@ -89,10 +95,28 @@ class StoreSubResourcesIntegrationTest {
         store.setName("本店");
         store.setSeatCount(20);
         store = storeRepository.save(store);
+
+        otherStore = new Store();
+        otherStore.setCompany(company);
+        otherStore.setName("他店");
+        otherStore.setSeatCount(10);
+        otherStore = storeRepository.save(otherStore);
+
+        // 「本店」のみ担当する店長。
+        manager = new User();
+        manager.setCompany(company);
+        manager.setStores(java.util.Set.of(store));
+        manager.setName("店長");
+        manager.setEmail("manager@example.com");
+        manager.setPassword("{bcrypt}dummy");
+        manager.setRole("MANAGER");
+        manager.setStatus("ACTIVE");
+        manager = userRepository.save(manager);
     }
 
     @AfterEach
     void cleanup() {
+        auditLogRepository.deleteAllInBatch();
         userRepository.deleteAllInBatch();
         storeBusinessDayRepository.deleteAllInBatch();
         paymentMethodConfigRepository.deleteAllInBatch();
@@ -275,6 +299,38 @@ class StoreSubResourcesIntegrationTest {
         mvc.perform(as(owner, get("/api/v1/stores/" + store.getId() + "/business-days")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.exceptions.length()").value(0));
+    }
+
+    // ---- 店舗の閲覧範囲（オーナー＝全店、店長＝自店のみ） ----
+
+    @Test
+    void 店舗一覧は店長には自分の所属店舗だけが返る() throws Exception {
+        mvc.perform(as(owner, get("/api/v1/stores")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mvc.perform(as(manager, get("/api/v1/stores")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("本店"));
+    }
+
+    @Test
+    void 店長は自店の卓決済手段営業日は閲覧でき他店は403() throws Exception {
+        mvc.perform(as(manager, get("/api/v1/stores/" + store.getId() + "/tables")))
+                .andExpect(status().isOk());
+        mvc.perform(as(manager, get("/api/v1/stores/" + otherStore.getId() + "/tables")))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(as(manager, get("/api/v1/stores/" + store.getId() + "/payment-methods")))
+                .andExpect(status().isOk());
+        mvc.perform(as(manager, get("/api/v1/stores/" + otherStore.getId() + "/payment-methods")))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(as(manager, get("/api/v1/stores/" + store.getId() + "/business-days")))
+                .andExpect(status().isOk());
+        mvc.perform(as(manager, get("/api/v1/stores/" + otherStore.getId() + "/business-days")))
+                .andExpect(status().isForbidden());
     }
 
     private record TablePayload(String tableNo, int seatCount, String seatType, String area, boolean active) {

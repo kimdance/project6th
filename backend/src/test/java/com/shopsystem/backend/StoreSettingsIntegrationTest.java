@@ -13,6 +13,7 @@ import com.shopsystem.backend.entity.Company;
 import com.shopsystem.backend.entity.Store;
 import com.shopsystem.backend.entity.StoreSetting;
 import com.shopsystem.backend.entity.User;
+import com.shopsystem.backend.repository.AuditLogRepository;
 import com.shopsystem.backend.repository.CompanyRepository;
 import com.shopsystem.backend.repository.StoreRepository;
 import com.shopsystem.backend.repository.StoreSettingRepository;
@@ -60,6 +61,9 @@ class StoreSettingsIntegrationTest {
     UserRepository userRepository;
 
     @Autowired
+    AuditLogRepository auditLogRepository;
+
+    @Autowired
     JwtService jwtService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -81,7 +85,8 @@ class StoreSettingsIntegrationTest {
 
     @AfterEach
     void cleanup() {
-        // users.store_id が store を参照するため、store 削除前に users を消す。
+        // audit_log.store_id / users.store_id が store を参照するため、store 削除前に消す。
+        auditLogRepository.deleteAllInBatch();
         userRepository.deleteAllInBatch();
         storeSettingRepository.deleteAllInBatch();
         storeRepository.deleteAllInBatch();
@@ -202,6 +207,17 @@ class StoreSettingsIntegrationTest {
                         .header("Authorization", "Bearer " + jwtService.issueAccessToken(manager))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 店長は自店の設定は閲覧でき他店は403() throws Exception {
+        Long ownStoreId = createStoreAndGetId(owner, "自店", 10);
+        Long otherStoreId = createStoreAndGetId(owner, "他店", 10);
+        User manager = newUser(company, "manager@example.com", "MANAGER",
+                storeRepository.findById(ownStoreId).orElseThrow());
+
+        mvc.perform(getSettings(manager, ownStoreId)).andExpect(status().isOk());
+        mvc.perform(getSettings(manager, otherStoreId)).andExpect(status().isForbidden());
     }
 
     @Test

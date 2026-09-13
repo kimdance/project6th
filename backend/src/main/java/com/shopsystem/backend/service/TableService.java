@@ -37,7 +37,7 @@ public class TableService {
     private final StoreAccessGuard accessGuard;
 
     public List<TableResponse> list(Long storeId) {
-        accessGuard.requireStoreInTenant(storeId);
+        accessGuard.requireCanView(storeId);
         return diningTableRepository.findAllByStore_IdOrderByTableNo(storeId).stream()
                 .map(this::toResponse)
                 .toList();
