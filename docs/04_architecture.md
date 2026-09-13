@@ -192,6 +192,25 @@
     B06（コース・飲み放題の基本設定。フェーズ1は`S`区分のため未着手）を除き実装済みとなった。
     店舗設定画面に「Web予約の確定方式」の選択と「取消・キャンセル時の請求既定」のチェックボックス
     2つを追加した。実装は `StoreSettingsRequest`／`StoreSettingsResponse`／`StoreService`。
+  - 2026-09-13 追補（監査ログの実装。FR-J01〜FR-J04）：`audit_log` テーブルは `V1__init_schema.sql`
+    の時点で作成済みだったが、書き込み・閲覧のアプリ層が未実装だったため実装した。エンドポイントは
+    `GET /api/v1/audit-logs`（他APIと同様、テナントはJWTから解決するため `companyCode` はパスに
+    含めない。§6.3 の表は誤って `GET /api/v1/companies/{companyCode}/audit-logs` と記載していたため
+    訂正）。書き込みは `AuthService`（`LOGIN_SUCCESS`／`LOGIN_FAILURE`／`USER_REGISTER`）、
+    `PasswordResetService`（`PASSWORD_CHANGE`。申込段階の `requestReset` は記録しない。理由は
+    メールアドレスの存在有無を漏らさない方針との整合、および未認証で叩ける経路のログ荒らし対策）、
+    `UserManagementService`（`PERMISSION_CHANGE`）、`StoreService`／`PaymentMethodService`
+    （`STORE_SETTING_CHANGE`／`PAYMENT_SETTING_CHANGE`。決済手段の接続情報は平文を記録せず
+    設定有無のみ）から行う。閲覧（`AuditLogService#search`）は経営管理者が全店、店長は自分の
+    所属店舗に紐づく操作のみ（`store_id` が null の全社共通操作は対象外）。実装は
+    `AuditLog`／`AuditLogRepository`／`AuditLogService`／`AuditLogController`。
+  - 2026-09-13 追補（店舗設定・卓・決済手段・営業日の閲覧範囲を修正）：上記 2026-09-11 追補で
+    「閲覧は認証済みなら可」「閲覧は`TableService`の方針どおり誰でもできる」としていた方針を、
+    `02_requirements.md` §3.2 権限マトリクスに合わせて改めた。店長は自分の所属店舗の設定・卓・
+    決済手段・営業日のみ閲覧でき、所属店舗以外を指定すると403（それ以外のロールは従来どおり
+    閲覧のみ制限なし、編集不可）。`StoreAccessGuard#requireCanView` を新設し、各サービスの一覧・
+    詳細取得（`StoreService#list/getSettings`・`TableService#list`・`PaymentMethodService#list`・
+    `BusinessDayService#get`）から呼ぶよう変更した。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1141,7 +1160,7 @@ CREATE TABLE outbound_message (
 | 会計 | `POST /api/v1/table-sessions/{id}/checks`、`POST .../checks/{id}/payments`、`POST .../checks/{id}/finalize`、`POST .../checks/{id}/refunds` | FR-G01〜G12 |
 | 日次締め | `POST /api/v1/stores/{storeId}/daily-closes`、`GET .../sales-daily-reports` | FR-H01〜H05 |
 | シフト・勤怠 | `GET/POST /api/v1/stores/{storeId}/staff`、`.../shift-requests`、`.../shift-schedules`、`POST .../time-clocks` | FR-I01〜I06 |
-| 監査ログ | `GET /api/v1/companies/{companyCode}/audit-logs` | FR-J04 |
+| 監査ログ | `GET /api/v1/audit-logs`（`?storeId=&action=&actor=&from=&to=&page=&size=`。テナントはJWTから解決するため、他APIと同様パスに `companyCode` は含めない。経営管理者は全店、店長は自店のみ閲覧可） | FR-J04 |
 | Webhook | `POST /api/v1/webhooks/paypay`、`POST /api/v1/webhooks/credit-card` | FR-G06, G07 |
 
 ### 6.4 税計算・端数処理
