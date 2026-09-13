@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchMe, ROLE_LABELS, type Me } from '../api/session';
+import { fetchMe, type Me } from '../api/session';
 import { fetchAppFeatures, type AppFeature } from '../api/appFeatures';
 
 /**
@@ -59,10 +59,6 @@ export const Home = () => {
   return (
     <div style={{ maxWidth: '720px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
       <h2>ホーム</h2>
-      <p style={{ color: '#333' }}>
-        ようこそ、{me.name} さん（{ROLE_LABELS[me.role]}）
-        {me.stores.length > 0 ? ` / ${me.stores.map((s) => s.name).join('・')}` : ''}
-      </p>
 
       {features.length > 0 ? (
         <div

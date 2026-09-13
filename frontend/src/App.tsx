@@ -8,6 +8,7 @@ import { MyAccountPage } from './pages/MyAccountPage';
 import { StoreSettingsPage } from './pages/StoreSettingsPage';
 import { TablesPage } from './pages/TablesPage';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { AuditLogPage } from './pages/AuditLogPage';
 import { FeaturePlaceholder } from './pages/FeaturePlaceholder';
 import { RequireAuth } from './components/RequireAuth';
 import { AppHeader } from './components/AppHeader';
@@ -57,6 +58,16 @@ function App() {
               element={
                 <RequireAuth>
                   <UserManagementPage />
+                </RequireAuth>
+              }
+            />
+
+            {/* 監査ログ（重要操作の検索・閲覧。経営管理者のみ。FR-J04） */}
+            <Route
+              path="/audit-logs"
+              element={
+                <RequireAuth>
+                  <AuditLogPage />
                 </RequireAuth>
               }
             />

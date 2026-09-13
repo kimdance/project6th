@@ -32,7 +32,8 @@ type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 /**
  * 卓（テーブル）マスタの管理画面（FR-B02）。
  * 店舗が複数あれば先に店舗を選ばせ、選んだ店舗の卓を一覧・作成・編集する。
- * 編集できるのは経営管理者（全店）／店長（自店のみ）。閲覧は誰でもできる（TableService）。
+ * 編集・閲覧とも経営管理者は全店、店長は自店のみ。それ以外のロールは編集不可だが閲覧はできる
+ * （TableService・StoreAccessGuard#requireCanView）。
  */
 export const TablesPage: React.FC = () => {
   const navigate = useNavigate();
