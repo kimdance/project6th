@@ -31,7 +31,7 @@ export const MyAccountPage: React.FC = () => {
       if (!result) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(result);
@@ -157,23 +157,6 @@ export const MyAccountPage: React.FC = () => {
           }}
         >
           {saving ? '処理中...' : '保存する'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/home')}
-          style={{
-            width: '100%',
-            padding: '10px',
-            marginTop: '10px',
-            backgroundColor: '#6c757d',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          ホームに戻る
         </button>
       </form>
     </div>

@@ -80,7 +80,7 @@ export const StoreSettingsPage: React.FC = () => {
       if (!meResult) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(meResult);
@@ -225,7 +225,6 @@ export const StoreSettingsPage: React.FC = () => {
         <p style={{ color: '#666' }}>
           店舗がまだ作成されていません。経営管理者に店舗の作成を依頼してください。
         </p>
-        <BackToHomeButton onClick={() => navigate('/home')} />
       </div>
     );
   }
@@ -504,10 +503,6 @@ export const StoreSettingsPage: React.FC = () => {
           <BackToListButton onClick={backToList} />
         </>
       )}
-
-      <div style={{ marginTop: '20px' }}>
-        <BackToHomeButton onClick={() => navigate('/home')} />
-      </div>
     </div>
   );
 };
@@ -569,23 +564,5 @@ const BackToListButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     }}
   >
     ← 店舗一覧に戻る
-  </button>
-);
-
-const BackToHomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    style={{
-      width: '100%',
-      padding: '10px',
-      backgroundColor: '#6c757d',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-    }}
-  >
-    ホームに戻る
   </button>
 );

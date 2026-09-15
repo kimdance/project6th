@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getTenantApiBaseUrl } from '../config';
 import { fetchMe, ROLE_LABELS, type Me } from '../api/session';
 
 /**
  * 全画面共通のヘッダー。「{会社名} 店舗管理システム」と、ログイン中であれば
- * 右側にユーザー情報（氏名・ロール・所属店舗）も表示する。
+ * 右側にユーザー情報（氏名・ロール・所属店舗）と「ホーム」「アカウント設定」「ログアウト」を表示する
+ * （2026-09-16追補：各画面に個別にあった「ホームに戻る」「アカウント設定」「ログアウト」を
+ * ここに一本化した）。
  * 会社名はサブドメインから解決する GET /api/v1/auth/tenant から取得する
  * （ログイン前後どちらの画面でも、認証なしで呼べるエンドポイント。04_architecture.md §6.1）。
  *
@@ -15,6 +17,7 @@ import { fetchMe, ROLE_LABELS, type Me } from '../api/session';
  */
 export const AppHeader: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
 
@@ -52,6 +55,13 @@ export const AppHeader: React.FC = () => {
     // ログイン・ログアウトは必ず画面遷移（navigate）を伴うため、パス変更のたびに見直す。
   }, [location.pathname]);
 
+  const handleLogout = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setMe(null);
+    navigate('/staff', { replace: true });
+  };
+
   return (
     <header
       style={{
@@ -66,15 +76,52 @@ export const AppHeader: React.FC = () => {
       }}
     >
       <h1 style={{ fontSize: '18px', margin: 0, fontWeight: 600, textAlign: 'left' }}>
-        {companyName ? `${companyName} 店舗管理システム` : '店舗管理システム'}
+        {location.pathname === '/'
+          ? companyName
+            ? `${companyName} ご予約`
+            : 'ご予約'
+          : companyName
+            ? `${companyName} 店舗管理システム`
+            : '店舗管理システム'}
       </h1>
 
       {me && (
-        <div style={{ fontSize: '13px', color: '#555', textAlign: 'right' }}>
-          {me.name} さん（{ROLE_LABELS[me.role]}）
-          {me.stores.length > 0 && `・${me.stores.map((s) => s.name).join('・')}`}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', color: '#555', textAlign: 'right' }}>
+            {me.name} さん（{ROLE_LABELS[me.role]}）
+            {me.stores.length > 0 && `・${me.stores.map((s) => s.name).join('・')}`}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {location.pathname !== '/home' && (
+              <HeaderButton onClick={() => navigate('/home')}>ホーム</HeaderButton>
+            )}
+            <HeaderButton onClick={() => navigate('/account')}>アカウント設定</HeaderButton>
+            <HeaderButton onClick={handleLogout}>ログアウト</HeaderButton>
+          </div>
         </div>
       )}
     </header>
   );
 };
+
+const HeaderButton: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({
+  onClick,
+  children,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    style={{
+      padding: '6px 12px',
+      fontSize: '13px',
+      backgroundColor: '#fff',
+      color: '#333',
+      border: '1px solid #ccc',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {children}
+  </button>
+);

@@ -77,7 +77,7 @@ export const AuditLogPage: React.FC = () => {
       if (!meResult) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(meResult);
@@ -125,7 +125,6 @@ export const AuditLogPage: React.FC = () => {
       <div style={{ maxWidth: '960px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
         <h2>監査ログ</h2>
         <p style={{ color: '#666' }}>この画面は経営管理者・店長のみご利用いただけます。</p>
-        <BackToHomeButton onClick={() => navigate('/home')} />
       </div>
     );
   }
@@ -316,8 +315,6 @@ export const AuditLogPage: React.FC = () => {
           次へ →
         </button>
       </div>
-
-      <BackToHomeButton onClick={() => navigate('/home')} />
     </div>
   );
 };
@@ -385,22 +382,4 @@ const FilterField: React.FC<{ label: string; children: React.ReactNode }> = ({ l
     </label>
     {children}
   </div>
-);
-
-const BackToHomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    style={{
-      width: '100%',
-      padding: '10px',
-      backgroundColor: '#6c757d',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-    }}
-  >
-    ホームに戻る
-  </button>
 );

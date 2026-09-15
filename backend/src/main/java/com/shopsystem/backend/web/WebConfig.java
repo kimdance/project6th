@@ -17,14 +17,15 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // /api/v1/admin/tenants はテナントがまだ存在しないため対象外（04_architecture.md §6.2）。
         // /api/v1/auth/me はログイン後の画面用でテナントはJWTから解決するため、Host由来の解決対象から除外する。
+        // /api/v1/public/** はお客様向けWeb予約（認証不要。FR-C03〜C06。§6.1 2026-09-15追補）。
         registry.addInterceptor(tenantResolutionInterceptor)
-                .addPathPatterns("/api/v1/auth/**")
+                .addPathPatterns("/api/v1/auth/**", "/api/v1/public/**")
                 .excludePathPatterns("/api/v1/auth/me");
         // ログイン済み前提のAPI（04_architecture.md §3.2）。/api/v1/auth/me もアクセストークン必須。
         registry.addInterceptor(jwtAuthenticationInterceptor)
                 .addPathPatterns(
                         "/api/v1/stores/**", "/api/v1/auth/me", "/api/v1/app-features", "/api/v1/users/**",
-                        "/api/v1/audit-logs/**");
+                        "/api/v1/audit-logs/**", "/api/v1/reservations/**");
     }
 
     @Override

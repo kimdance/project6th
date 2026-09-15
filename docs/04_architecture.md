@@ -211,6 +211,23 @@
     閲覧のみ制限なし、編集不可）。`StoreAccessGuard#requireCanView` を新設し、各サービスの一覧・
     詳細取得（`StoreService#list/getSettings`・`TableService#list`・`PaymentMethodService#list`・
     `BusinessDayService#get`）から呼ぶよう変更した。
+  - 2026-09-15 追補（フロントエンドの単一アプリ化・お客様向けとスタッフ向けのURL分離。FR-C03〜C06）：
+    §2 の当初案「`admin` / `pos` / `guest` の3アプリ構成」は採らず、実際に作られてきたとおり単一アプリ
+    （`frontend/`）を正式な方針とする。3アプリに分けるより開発・デプロイの手間が小さいため。
+    その上で、同じサブドメイン（`<company_code>.<サービスドメイン>`）の中で、お客様向けとスタッフ向けを
+    **URLのパス**で分ける（サブドメインをさらに `internal.`／`www.` のように2段にする案は撤回。
+    ワイルドカード証明書が1段のラベルしかカバーできず、会社が増えるたびに専用証明書が必要になって
+    テナント作成の自動化と両立しないため。§6.1 冒頭の前提と矛盾する）。
+    - パスなし（`/`）＝**お客様向け**の入口（Web予約フォーム、または将来作るかもしれない簡単な
+      店舗紹介ページ）に変更する。旧来ここに置いていたスタッフ用ログイン画面は `/staff` へ移す。
+    - ログイン後の画面（`/home` 以下）は従来どおり認証必須のままのため、お客様がURLを直接開いても
+      ログイン画面が表示されるだけで内部の内容は見えない。変更が必要なのは入口（`/`）のみ。
+    - Web予約の公開APIは、§6.3 の表で未定義のまま置いていた `{storeCode}` を撤回し、既存の
+      `store.id`（数値）を使う：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。1店舗のみの
+      テナントは店舗選択を省略できる）、`POST /api/v1/public/stores/{storeId}/reservations`
+      （Web予約の申込。認証不要）。どちらもテナントの識別は他の未認証エンドポイントと同様
+      `TenantResolutionInterceptor`（Hostヘッダのサブドメイン）で行い、`company_code` の解決方式
+      自体（§6.1 冒頭）は変更しない。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -243,7 +260,9 @@
 
 `01` 第5章の構成案を、以下のとおり確定する（変更点のみ記載。それ以外は `01` 5.2〜5.6 のとおり）。
 
-- フロントエンド：React 19 + TypeScript + Vite。`admin` / `pos` / `guest` の3アプリ構成。
+- フロントエンド：React 19 + TypeScript + Vite。単一アプリ構成（`frontend/`）とし、当初案の
+  `admin` / `pos` / `guest` の3アプリ構成は採らない（2026-09-15追補。理由・詳細は本章冒頭の
+  改訂履歴を参照）。
 - バックエンド：Spring Boot 4.x / Java 21 / Maven。パッケージルートは既存踏襲で `com.shopsystem.backend`。
 - DB：PostgreSQL。マイグレーション管理は **Flyway** を採用する（`src/main/resources/db/migration/V<n>__<desc>.sql`）。
   Hibernate の `ddl-auto` はフェーズ1から `validate` 固定とし、スキーマ変更は必ずマイグレーションファイル経由で行う。
@@ -1153,7 +1172,7 @@ CREATE TABLE outbound_message (
 | ホーム画面メニュー | `GET /api/v1/app-features`（アクセストークン必須。呼び出し元のロールで表示可能な `app_feature` を `display_order` 順で返す。自テナントに店舗が1件も無ければ `requires_store = true` の項目は除外） | — |
 | ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
-| 予約 | `GET/POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`POST /api/v1/public/stores/{storeCode}/reservations`（Web予約・認証不要） | FR-C01〜C09 |
+| 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories` | FR-D01〜D05 |
 | 卓・注文 | `POST /api/v1/stores/{storeId}/table-sessions`、`POST .../{id}/orders`、`PATCH .../order-lines/{id}` | FR-E01〜E07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |

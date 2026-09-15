@@ -26,7 +26,7 @@ export const Home = () => {
       if (!result) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(result);
@@ -41,12 +41,6 @@ export const Home = () => {
       cancelled = true;
     };
   }, [navigate]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/', { replace: true });
-  };
 
   if (loading || !me) {
     return (
@@ -91,37 +85,6 @@ export const Home = () => {
       ) : (
         <p style={{ color: '#666', marginTop: '24px' }}>現在ご利用いただける機能はありません。</p>
       )}
-
-      <div style={{ marginTop: '32px', display: 'flex', gap: '12px' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/account')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#fff',
-            color: '#333',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          アカウント設定
-        </button>
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#6c757d',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          ログアウト
-        </button>
-      </div>
     </div>
   );
 };

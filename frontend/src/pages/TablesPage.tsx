@@ -66,7 +66,7 @@ export const TablesPage: React.FC = () => {
       if (!meResult) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(meResult);
@@ -215,7 +215,6 @@ export const TablesPage: React.FC = () => {
       <div style={{ maxWidth: '480px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
         <h2>卓（テーブル・カウンター）</h2>
         <p style={{ color: '#666' }}>先に店舗設定から店舗を作成してください。</p>
-        <BackToHomeButton onClick={() => navigate('/home')} />
       </div>
     );
   }
@@ -456,10 +455,6 @@ export const TablesPage: React.FC = () => {
           <BackToListButton onClick={backToList} />
         </form>
       )}
-
-      <div style={{ marginTop: '20px' }}>
-        <BackToHomeButton onClick={() => navigate('/home')} />
-      </div>
     </div>
   );
 };
@@ -487,23 +482,5 @@ const BackToListButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     }}
   >
     ← 卓一覧に戻る
-  </button>
-);
-
-const BackToHomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    style={{
-      width: '100%',
-      padding: '10px',
-      backgroundColor: '#6c757d',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-    }}
-  >
-    ホームに戻る
   </button>
 );

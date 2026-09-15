@@ -7,5 +7,5 @@ import { Navigate } from 'react-router-dom';
  */
 export const RequireAuth = ({ children }: { children: ReactNode }) => {
   const hasToken = !!localStorage.getItem('accessToken');
-  return hasToken ? <>{children}</> : <Navigate to="/" replace />;
+  return hasToken ? <>{children}</> : <Navigate to="/staff" replace />;
 };

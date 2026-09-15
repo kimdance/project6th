@@ -50,7 +50,7 @@ export const UserManagementPage: React.FC = () => {
       if (!meResult) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        navigate('/', { replace: true });
+        navigate('/staff', { replace: true });
         return;
       }
       setMe(meResult);
@@ -138,7 +138,6 @@ export const UserManagementPage: React.FC = () => {
       <div style={{ maxWidth: '560px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
         <h2>ユーザー管理</h2>
         <p style={{ color: '#666' }}>この画面は経営管理者のみご利用いただけます。</p>
-        <BackToHomeButton onClick={() => navigate('/home')} />
       </div>
     );
   }
@@ -270,10 +269,6 @@ export const UserManagementPage: React.FC = () => {
           <BackToListButton onClick={backToList} />
         </form>
       )}
-
-      <div style={{ marginTop: '20px' }}>
-        <BackToHomeButton onClick={() => navigate('/home')} />
-      </div>
     </div>
   );
 };
@@ -312,23 +307,5 @@ const BackToListButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     }}
   >
     ← ユーザー一覧に戻る
-  </button>
-);
-
-const BackToHomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    style={{
-      width: '100%',
-      padding: '10px',
-      backgroundColor: '#6c757d',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-    }}
-  >
-    ホームに戻る
   </button>
 );

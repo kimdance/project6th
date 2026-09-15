@@ -17,6 +17,8 @@ public interface StoreBusinessDayRepository extends JpaRepository<StoreBusinessD
 
     Optional<StoreBusinessDay> findByStore_IdAndWeekday(Long storeId, Short weekday);
 
+    Optional<StoreBusinessDay> findByStore_IdAndBusinessDate(Long storeId, LocalDate businessDate);
+
     Optional<StoreBusinessDay> findByIdAndStore_Id(Long id, Long storeId);
 
     boolean existsByStore_IdAndBusinessDate(Long storeId, LocalDate businessDate);

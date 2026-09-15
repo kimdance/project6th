@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Login } from './forms/Login';
+import { PublicReservationPage } from './pages/PublicReservationPage';
 import { UserRegister } from './forms/UserRegister';
 import { ForgotPassword } from './forms/ForgotPassword';
 import { ResetPassword } from './forms/ResetPassword';
@@ -7,6 +8,7 @@ import { Home } from './pages/Home';
 import { MyAccountPage } from './pages/MyAccountPage';
 import { StoreSettingsPage } from './pages/StoreSettingsPage';
 import { TablesPage } from './pages/TablesPage';
+import { ReservationsPage } from './pages/ReservationsPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { FeaturePlaceholder } from './pages/FeaturePlaceholder';
@@ -22,8 +24,10 @@ function App() {
         <AppHeader />
         <main>
           <Routes>
-            {/* 初期画面: ログイン */}
-            <Route path="/" element={<Login />} />
+            {/* パスなし＝お客様向けの入口（Web予約フォーム。FR-C03。ログイン不要）。
+                04_architecture.md §6.1 2026-09-15追補：スタッフ用ログインは /staff に分離した。 */}
+            <Route path="/" element={<PublicReservationPage />} />
+            <Route path="/staff" element={<Login />} />
 
             {/* ログイン後の共通トップ画面（機能の入口を並べるメニュー） */}
             <Route
@@ -68,6 +72,16 @@ function App() {
               element={
                 <RequireAuth>
                   <AuditLogPage />
+                </RequireAuth>
+              }
+            />
+
+            {/* 予約台帳（電話予約・当日ウォークインの登録・変更・キャンセル。FR-C01・C02・C09） */}
+            <Route
+              path="/reservations"
+              element={
+                <RequireAuth>
+                  <ReservationsPage />
                 </RequireAuth>
               }
             />

@@ -18,4 +18,7 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
 
     // ホーム画面のメニュー出し分け（店舗が1件も無ければ「店舗設定」以外を隠す）に使う。
     boolean existsByCompany_Id(Long companyId);
+
+    // Web予約（認証不要）の店舗選択用。無効化された店舗はお客様には見せない。
+    List<Store> findByCompany_IdAndActiveTrueOrderById(Long companyId);
 }

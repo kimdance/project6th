@@ -64,7 +64,7 @@ export const ResetPassword: React.FC = () => {
           <TopMessage messages="パスワードを再設定しました。新しいパスワードでログインしてください。" isError={false} />
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/staff')}
             style={{
               width: '100%',
               padding: '10px',

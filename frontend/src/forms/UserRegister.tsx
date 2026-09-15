@@ -60,7 +60,7 @@ export const UserRegister: React.FC = () => {
       });
 
       if (response.ok) {
-        navigate('/', {
+        navigate('/staff', {
           state: {
             email: formData.email,
             password: formData.password,
@@ -192,7 +192,7 @@ export const UserRegister: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/staff')}
           style={{
             width: '100%',
             padding: '10px',

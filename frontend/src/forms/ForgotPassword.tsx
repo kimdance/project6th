@@ -40,7 +40,7 @@ export const ForgotPassword: React.FC = () => {
           />
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/staff')}
             style={{
               width: '100%',
               padding: '10px',
@@ -87,7 +87,7 @@ export const ForgotPassword: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/staff')}
             style={{
               width: '100%',
               padding: '10px',
