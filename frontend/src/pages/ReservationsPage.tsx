@@ -465,7 +465,7 @@ export const ReservationsPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                disabled={saving || cancelReason.trim() === ''}
+                disabled={saving}
                 onClick={() => handleStatusChange('CANCELLED', cancelReason)}
                 style={dangerButtonStyle}
               >
