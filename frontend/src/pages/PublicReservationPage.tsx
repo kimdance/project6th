@@ -213,7 +213,11 @@ export const PublicReservationPage: React.FC = () => {
             <input
               type="text"
               value={form.guestPhone}
-              onChange={(e) => setForm((prev) => ({ ...prev, guestPhone: e.target.value }))}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, guestPhone: e.target.value }));
+                clearFieldError('guestPhone');
+              }}
+              required
               style={getInputStyle('guestPhone')}
             />
           </FormField>

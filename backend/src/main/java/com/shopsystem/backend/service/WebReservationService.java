@@ -125,6 +125,10 @@ public class WebReservationService {
         if (trimToNull(req.getGuestName()) == null) {
             errors.add(err("reservation.error.guest-name.required", "guestName"));
         }
+        // 電話番号は、お店から折り返し連絡できるよう必須にする（メールアドレスは任意）。
+        if (trimToNull(req.getGuestPhone()) == null) {
+            errors.add(err("reservation.error.guest-phone.required.web", "guestPhone"));
+        }
         if (!errors.isEmpty()) {
             throw new BusinessException(errors);
         }
