@@ -437,13 +437,25 @@ export const ReservationsPage: React.FC = () => {
             {detail.cancelledReason && <div>キャンセル理由: {detail.cancelledReason}</div>}
           </div>
 
-          {canEditStore(detail.storeId) && detail.status === 'CONFIRMED' && (
+          {canEditStore(detail.storeId) && (detail.status === 'REQUESTED' || detail.status === 'CONFIRMED') && (
             <>
+              {detail.status === 'REQUESTED' && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleStatusChange('CONFIRMED')}
+                  style={primaryButtonStyle}
+                >
+                  承認する
+                </button>
+              )}
               <button type="button" onClick={() => openEditFromDetail(detail)} style={primaryOutlineButtonStyle}>
                 内容を編集する
               </button>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>キャンセル理由:</label>
+                <label style={{ display: 'block', marginBottom: '5px' }}>
+                  {detail.status === 'REQUESTED' ? '却下理由:' : 'キャンセル理由:'}
+                </label>
                 <input
                   type="text"
                   value={cancelReason}
@@ -457,16 +469,18 @@ export const ReservationsPage: React.FC = () => {
                 onClick={() => handleStatusChange('CANCELLED', cancelReason)}
                 style={dangerButtonStyle}
               >
-                この予約をキャンセルする
+                {detail.status === 'REQUESTED' ? 'この申込を却下する' : 'この予約をキャンセルする'}
               </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => handleStatusChange('NO_SHOW')}
-                style={dangerOutlineButtonStyle}
-              >
-                無断キャンセル（来店なし）として記録する
-              </button>
+              {detail.status === 'CONFIRMED' && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleStatusChange('NO_SHOW')}
+                  style={dangerOutlineButtonStyle}
+                >
+                  無断キャンセル（来店なし）として記録する
+                </button>
+              )}
             </>
           )}
 
@@ -631,6 +645,17 @@ const toggleButtonActiveStyle: React.CSSProperties = {
   backgroundColor: '#007bff',
   color: '#fff',
   border: '1px solid #007bff',
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px',
+  marginBottom: '15px',
+  backgroundColor: '#007bff',
+  color: '#fff',
+  border: 'none',
+  borderRadius: '4px',
+  cursor: 'pointer',
 };
 
 const primaryOutlineButtonStyle: React.CSSProperties = {
