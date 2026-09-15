@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { TopMessage } from '../components/TopMessage';
 import {
   fetchPublicStores,
@@ -26,8 +25,6 @@ type View = 'loading' | 'no-store' | 'select-store' | 'form' | 'done';
  * スタッフ用ログインは `/staff` に分離した。
  */
 export const PublicReservationPage: React.FC = () => {
-  const navigate = useNavigate();
-
   const [stores, setStores] = useState<PublicStore[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [view, setView] = useState<View>('loading');
@@ -268,24 +265,6 @@ export const PublicReservationPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      <div style={{ marginTop: '32px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/staff')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#888',
-            cursor: 'pointer',
-            fontSize: '12px',
-            textDecoration: 'underline',
-            padding: 0,
-          }}
-        >
-          店舗スタッフの方はこちら
-        </button>
-      </div>
     </div>
   );
 };

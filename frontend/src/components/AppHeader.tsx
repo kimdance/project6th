@@ -11,6 +11,10 @@ import { fetchMe, ROLE_LABELS, type Me } from '../api/session';
  * 会社名はサブドメインから解決する GET /api/v1/auth/tenant から取得する
  * （ログイン前後どちらの画面でも、認証なしで呼べるエンドポイント。04_architecture.md §6.1）。
  *
+ * お客様向けの入口（`/`）では、ブラウザに古いスタッフの認証トークンが残っていても
+ * スタッフの氏名・ロールや「ホーム」等のボタンを一切表示しない（2026-09-16追補・不具合修正）。
+ * 同じ端末でスタッフ→お客様の順に画面を開いた場合でも内部情報が漏れないようにするため。
+ *
  * このヘッダーはルーティングの外（画面遷移をまたいでマウントされたまま）に置かれているため、
  * ログイン・ログアウト直後にユーザー情報を更新するには、遷移のたびに /me を取得し直す必要がある
  * （location.pathname を依存配列に入れて画面遷移ごとに再取得する）。
@@ -18,6 +22,7 @@ import { fetchMe, ROLE_LABELS, type Me } from '../api/session';
 export const AppHeader: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const isPublicPage = location.pathname === '/';
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
 
@@ -41,6 +46,11 @@ export const AppHeader: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (isPublicPage) {
+      // お客様向けの入口ではスタッフの認証状態を一切扱わない（トークンが残っていても問い合わせない）。
+      setMe(null);
+      return;
+    }
     let cancelled = false;
 
     fetchMe().then((result) => {
@@ -53,7 +63,7 @@ export const AppHeader: React.FC = () => {
       cancelled = true;
     };
     // ログイン・ログアウトは必ず画面遷移（navigate）を伴うため、パス変更のたびに見直す。
-  }, [location.pathname]);
+  }, [location.pathname, isPublicPage]);
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
