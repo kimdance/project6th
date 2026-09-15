@@ -8,7 +8,11 @@ export type AuditAction =
   | 'USER_REGISTER'
   | 'PERMISSION_CHANGE'
   | 'STORE_SETTING_CHANGE'
-  | 'PAYMENT_SETTING_CHANGE';
+  | 'PAYMENT_SETTING_CHANGE'
+  | 'TABLE_CHANGE'
+  | 'BUSINESS_DAY_CHANGE'
+  | 'RESERVATION_CHANGE'
+  | 'RESERVATION_CANCEL';
 
 /** 操作種別の日本語表示名（AuditActions と対応。未知の値はそのままのコードを表示する）。 */
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
@@ -19,6 +23,10 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   PERMISSION_CHANGE: 'ユーザー権限変更',
   STORE_SETTING_CHANGE: '店舗設定変更',
   PAYMENT_SETTING_CHANGE: '決済手段設定変更',
+  TABLE_CHANGE: '卓の追加・変更',
+  BUSINESS_DAY_CHANGE: '営業日の変更',
+  RESERVATION_CHANGE: '予約の登録・変更',
+  RESERVATION_CANCEL: '予約のキャンセル',
 };
 
 export function auditActionLabel(action: string): string {

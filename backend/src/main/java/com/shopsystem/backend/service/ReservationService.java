@@ -46,6 +46,7 @@ public class ReservationService {
     private final UserRepository userRepository;
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
+    private final AuditLogService auditLogService;
 
     /**
      * 予約の一覧（FR-C02）。{@code storeId} を指定すればその店舗のみ、省略時は横断表示：
@@ -112,6 +113,10 @@ public class ReservationService {
         reservation.setConfirmedAt(now);
 
         reservation = reservationRepository.save(reservation);
+
+        auditLogService.recordForCurrentUser(AuditActions.RESERVATION_CHANGE, storeId, "RESERVATION",
+                reservation.getId(), null, summarize(reservation));
+
         return toResponse(reservation);
     }
 
@@ -127,10 +132,15 @@ public class ReservationService {
             throw new BusinessException(
                     List.of(err("reservation.error.status.not-editable", null)));
         }
+        String beforeSummary = summarize(reservation);
 
         validateDetails(req, reservation.getChannel());
         applyDetails(reservation, req);
         reservationRepository.save(reservation);
+
+        auditLogService.recordForCurrentUser(AuditActions.RESERVATION_CHANGE, storeId, "RESERVATION",
+                reservation.getId(), beforeSummary, summarize(reservation));
+
         return toResponse(reservation);
     }
 
@@ -149,6 +159,7 @@ public class ReservationService {
             throw new BusinessException(
                     List.of(err("reservation.error.status.invalid-transition", "status")));
         }
+        String beforeSummary = "status=" + from;
 
         if ("CANCELLED".equals(to)) {
             String reason = trimToNull(req.getCancelledReason());
@@ -167,7 +178,21 @@ public class ReservationService {
 
         reservation.setStatus(to);
         reservationRepository.save(reservation);
+
+        String action = ("CANCELLED".equals(to) || "NO_SHOW".equals(to))
+                ? AuditActions.RESERVATION_CANCEL
+                : AuditActions.RESERVATION_CHANGE;
+        String afterSummary = "status=" + to
+                + (reservation.getCancelledReason() != null ? ", reason=" + reservation.getCancelledReason() : "");
+        auditLogService.recordForCurrentUser(action, storeId, "RESERVATION", reservation.getId(),
+                beforeSummary, afterSummary);
+
         return toResponse(reservation);
+    }
+
+    private String summarize(Reservation r) {
+        return "reservedAt=" + r.getReservedAt() + ", partySize=" + r.getPartySize()
+                + ", guestName=" + r.getGuestName() + ", channel=" + r.getChannel() + ", status=" + r.getStatus();
     }
 
     private void validateDetails(ReservationRequest req, String channel) {

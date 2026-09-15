@@ -35,6 +35,7 @@ public class BusinessDayService {
     private final StoreBusinessDayRepository storeBusinessDayRepository;
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
+    private final AuditLogService auditLogService;
 
     public BusinessDaysResponse get(Long storeId) {
         accessGuard.requireCanView(storeId);
@@ -99,6 +100,10 @@ public class BusinessDayService {
             row = storeBusinessDayRepository.save(row);
             result.add(toWeeklyItem(row));
         }
+
+        auditLogService.recordForCurrentUser(AuditActions.BUSINESS_DAY_CHANGE, storeId, "BUSINESS_DAY", storeId,
+                null, summarizeWeekly(result));
+
         return result;
     }
 
@@ -131,6 +136,9 @@ public class BusinessDayService {
         row.setReservationCapacity(req.getReservationCapacity());
         row = storeBusinessDayRepository.save(row);
 
+        auditLogService.recordForCurrentUser(AuditActions.BUSINESS_DAY_CHANGE, storeId, "BUSINESS_DAY", row.getId(),
+                null, summarizeException(row));
+
         return toExceptionResponse(row);
     }
 
@@ -142,7 +150,24 @@ public class BusinessDayService {
         StoreBusinessDay row = storeBusinessDayRepository.findByIdAndStore_Id(exceptionId, storeId)
                 .filter(r -> r.getBusinessDate() != null)
                 .orElseThrow(accessGuard::notFound);
+        String beforeSummary = summarizeException(row);
         storeBusinessDayRepository.delete(row);
+
+        auditLogService.recordForCurrentUser(AuditActions.BUSINESS_DAY_CHANGE, storeId, "BUSINESS_DAY", exceptionId,
+                beforeSummary, null);
+    }
+
+    private String summarizeWeekly(List<WeeklyBusinessDayItem> items) {
+        return items.stream()
+                .map(i -> "weekday" + i.getWeekday() + "=" + (i.isOpen() ? "OPEN" : "CLOSED")
+                        + (i.getReservationCapacity() != null ? ",cap=" + i.getReservationCapacity() : ""))
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("(empty)");
+    }
+
+    private String summarizeException(StoreBusinessDay row) {
+        return "businessDate=" + row.getBusinessDate() + ", open=" + row.isOpen()
+                + ", capacity=" + row.getReservationCapacity();
     }
 
     private WeeklyBusinessDayItem toWeeklyItem(StoreBusinessDay row) {

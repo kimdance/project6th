@@ -127,7 +127,7 @@
 
 | エンティティ | 区分 | 目的 | 主な属性（代表） |
 |--------------|:--:|------|------------------|
-| `audit_log`（監査ログ） | M | 重要操作の追記専用証跡 | `id`, `company_code`（テナント識別子）, `store_id`, `actor`（操作者, user_id or SYSTEM）, `action`（操作種別, LOGIN/PERMISSION_CHANGE/PAYMENT_SETTING_CHANGE/MENU_PRICE_CHANGE/ORDER_LINE_CANCEL_AFTER_SERVE/CHECK_FINALIZE/CHECK_VOID/REFUND/DISCOUNT/DAILY_CLOSE/TIMECLOCK_EDIT/DATA_EXPORT/...）, `target_type`（対象種別）, `target_id`（対象ID）, `before_summary`（変更前サマリ）, `after_summary`（変更後サマリ）, `ip`, `device`, `occurred_at`（発生日時） |
+| `audit_log`（監査ログ） | M | 重要操作の追記専用証跡 | `id`, `company_code`（テナント識別子）, `store_id`, `actor`（操作者, user_id or SYSTEM）, `action`（操作種別, LOGIN/PERMISSION_CHANGE/STORE_SETTING_CHANGE/PAYMENT_SETTING_CHANGE/TABLE_CHANGE/BUSINESS_DAY_CHANGE/RESERVATION_CHANGE/RESERVATION_CANCEL/MENU_PRICE_CHANGE/ORDER_LINE_CANCEL_AFTER_SERVE/CHECK_FINALIZE/CHECK_VOID/REFUND/DISCOUNT/DAILY_CLOSE/TIMECLOCK_EDIT/DATA_EXPORT/...。2026-09-16追補で卓・営業日・予約を追加）, `target_type`（対象種別）, `target_id`（対象ID）, `before_summary`（変更前サマリ）, `after_summary`（変更後サマリ）, `ip`, `device`, `occurred_at`（発生日時） |
 | `domain_event`（ドメインイベント） | (基盤) | 状態変化の時刻付き記録（分析・AI後付け用） | `id`, `company_code`（テナント識別子）, `store_id`, `aggregate_type`（集約種別, TABLE_SESSION/ORDER_LINE/CHECK/PAYMENT/DAILY_CLOSE）, `aggregate_id`（集約ID）, `event_type`（イベント種別, TABLE_OPENED/TABLE_CLOSED/LINE_ADDED/LINE_SERVED/LINE_CANCELLED/MOBILE_ORDER_SUBMITTED/MOBILE_ORDER_ACCEPTED/MOBILE_ORDER_REJECTED/CHECK_FINALIZED/REFUND_ISSUED/...）, `payload`（ペイロード, JSON）, `occurred_at`（発生日時）, `actor`（操作者） |
 | `outbound_message`（送信メッセージ） | S | メール／SMS の送信キューと結果（予約通知・シフト公開通知） | `id`, `store_id`, `type`（送信種別, EMAIL/SMS）, `to`（宛先）, `template`（テンプレート）, `status`（送信状態, QUEUED/SENT/FAILED）, `sent_at`（送信日時）, `error`（エラー内容） |
 

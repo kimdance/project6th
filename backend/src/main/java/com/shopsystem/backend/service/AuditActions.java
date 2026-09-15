@@ -14,6 +14,10 @@ public final class AuditActions {
     public static final String PERMISSION_CHANGE = "PERMISSION_CHANGE";
     public static final String STORE_SETTING_CHANGE = "STORE_SETTING_CHANGE";
     public static final String PAYMENT_SETTING_CHANGE = "PAYMENT_SETTING_CHANGE";
+    public static final String TABLE_CHANGE = "TABLE_CHANGE";
+    public static final String BUSINESS_DAY_CHANGE = "BUSINESS_DAY_CHANGE";
+    public static final String RESERVATION_CHANGE = "RESERVATION_CHANGE";
+    public static final String RESERVATION_CANCEL = "RESERVATION_CANCEL";
 
     private AuditActions() {
     }

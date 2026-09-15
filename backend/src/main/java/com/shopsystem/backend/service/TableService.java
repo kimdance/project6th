@@ -35,6 +35,7 @@ public class TableService {
     private final DiningTableRepository diningTableRepository;
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
+    private final AuditLogService auditLogService;
 
     public List<TableResponse> list(Long storeId) {
         accessGuard.requireCanView(storeId);
@@ -65,6 +66,9 @@ public class TableService {
         table.setQrToken(generateUniqueQrToken(storeId));
         table = diningTableRepository.save(table);
 
+        auditLogService.recordForCurrentUser(AuditActions.TABLE_CHANGE, storeId, "TABLE", table.getId(),
+                null, summarize(table));
+
         return toResponse(table);
     }
 
@@ -75,6 +79,7 @@ public class TableService {
 
         DiningTable table = diningTableRepository.findByIdAndStore_Id(tableId, storeId)
                 .orElseThrow(accessGuard::notFound);
+        String beforeSummary = summarize(table);
 
         String tableNo = validate(storeId, req, tableId);
 
@@ -91,7 +96,16 @@ public class TableService {
         table.setActive(req.isActive());
         diningTableRepository.save(table);
 
+        auditLogService.recordForCurrentUser(AuditActions.TABLE_CHANGE, storeId, "TABLE", table.getId(),
+                beforeSummary, summarize(table));
+
         return toResponse(table);
+    }
+
+    private String summarize(DiningTable table) {
+        return "tableNo=" + table.getTableNo() + ", seatType=" + table.getSeatType()
+                + ", seatCount=" + table.getSeatCount() + ", area=" + table.getArea()
+                + ", active=" + table.isActive();
     }
 
     private String validate(Long storeId, TableRequest req, Long ignoredTableId) {

@@ -56,6 +56,7 @@ public class WebReservationService {
     private final JavaMailSender mailSender;
     private final PasswordResetProperties mailProperties;
     private final MessageSource messageSource;
+    private final AuditLogService auditLogService;
 
     public List<PublicStoreResponse> listStores(Long companyId) {
         return storeRepository.findByCompany_IdAndActiveTrueOrderById(companyId).stream()
@@ -94,6 +95,12 @@ public class WebReservationService {
             reservation.setStatus("REQUESTED");
         }
         reservation = reservationRepository.save(reservation);
+
+        auditLogService.record(companyCode, storeId, "guest:web", AuditActions.RESERVATION_CHANGE,
+                "RESERVATION", reservation.getId(), null,
+                "reservedAt=" + reservation.getReservedAt() + ", partySize=" + reservation.getPartySize()
+                        + ", guestName=" + reservation.getGuestName() + ", channel=WEB, status="
+                        + reservation.getStatus());
 
         if (reservation.getGuestEmail() != null) {
             sendConfirmationEmail(reservation, store, instant);
