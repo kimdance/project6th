@@ -610,7 +610,7 @@ stateDiagram-v2
 ```
 
 - PayPay 連携失敗時は `FAILED` を記録し、手入力（`is_manual_entry=true`）の `SUCCESS` で消し込むことを許容（FR-G06）。
-- 楽天ペイ（静的QR／ストアスキャン）は常に `is_manual_entry=true`（FR-G07b）。
+- 楽天ペイ（QR表示：静的／動的、またはストアスキャン）は常に `is_manual_entry=true`（FR-G07b）。
 
 ### 4.8 日次締め `daily_close.status`
 
