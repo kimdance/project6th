@@ -21,7 +21,7 @@
 | # | 方針 | 根拠 |
 |---|------|------|
 | 1 | **マルチテナント**：全業務テーブルはテナント識別子 `company_code` を持つ（共有DB・共有スキーマ）。アプリ層で必ずテナント境界を強制する。 | 2.5 マルチテナント分離、FR-A06 |
-| 2 | **店舗スコープ**：全業務テーブルは `store_id` を持つ。フェーズ1は「1テナント1店舗」だが、構造は複数店舗前提。 | 2.5 店舗数、NFR-07 |
+| 2 | **店舗スコープ**：全業務テーブルは `store_id` を持つ。1テナントが複数店舗を持てる（2026-09-11改訂。新規追加は経営管理者のみ）。 | 2.5 店舗数、NFR-07 |
 | 3 | **金額は整数（円）**。`amount_jpy` のように単位を明示。丸め規則は税計算で定義（`04`）。 | DAT-03 |
 | 4 | **価格・名称はスナップショット**：注文明細・会計明細は、その時点のメニュー名・単価・税区分を複製して保持する（後からメニューを変えても過去伝票は不変）。 | FR-K01、FR-D01 |
 | 5 | **確定後は不変・訂正はイベント**：会計確定後の修正は「返金」、日次締め後の修正は「翌営業日の補正」。元レコードは削除しない。 | FR-G10、FR-H01 |
@@ -43,15 +43,20 @@
 
 | エンティティ | 区分 | 目的 | 主な属性（代表） |
 |--------------|:--:|------|------------------|
-| `company`（テナント） | M | 契約単位。1オーナー＝1テナント | `id`, `company_code`（テナント識別子, UK）, `name`, `contract_status`（契約状態）, `created_at` |
+| `company`（テナント） | M | 契約単位。1経営管理者＝1テナント | `id`, `company_code`（テナント識別子, UK）, `name`, `contract_status`（契約状態）, `created_at` |
 | `store`（店舗） | M | 営業拠点。全業務データのスコープ | `id`, `company_id`（テナント識別子, FK）, `name`, `address`, `phone`, `business_hours`（営業時間）, `seat_count`（座席数）, `timezone`（タイムゾーン）, `is_active`（有効フラグ） |
 | `store_setting`（店舗設定） | M | 税・予約・モバイルオーダー等の店舗ポリシー（`store` と 1:1） | `store_id`, `tax_rounding`（税額丸め規則）, `price_includes_tax`（税込価格か）, `invoice_reg_no`（適格請求書登録番号）, `web_reservation_mode`（Web予約受付方式, APPROVAL/INSTANT）, `mobile_order_enabled`（モバイルオーダー有効）, `last_order_default_min`（ラストオーダー既定, 分）, `cancel_charge_default_customer`（客都合キャンセルの既定課金, bool）, `cancel_charge_default_store`（店都合キャンセルの既定課金, bool） |
-| `user`（利用者） | M | ログインユーザー。既存 `users` を継承（`company_id + email` 複合UK） | `id`, `company_id`（テナント識別子, FK）, `store_id`（所属店舗, nullable=全店）, `name`, `email`, `password`(hash), `telnumber`（電話番号）, `role`（権限ロール, OWNER/MANAGER/HALL/KITCHEN/PARTTIME）, `status`（アカウント状態, ACTIVE/LOCKED/INVITED）, `two_factor_enabled`（2要素認証有効） |
-| `user_invitation`（招待） | M | 招待リンクの発行・失効 | `id`, `company_id`（テナント識別子, FK）, `store_id`, `email`, `role`, `token`（招待トークン）, `expires_at`（有効期限）, `accepted_at`（受諾日時） |
+| `user`（利用者） | M | ログインユーザー。既存 `users` を継承（`company_id + email` 複合UK） | `id`, `company_id`（テナント識別子, FK）, `stores`（所属店舗, `user_store`中間テーブルで多対多。0件=全店。1人が複数店舗を兼任可能。役割は店舗間で共通の1つ。2026-09-12改訂）, `name`, `email`, `password`(hash), `telnumber`（電話番号）, `role`（権限ロール, OWNER/MANAGER/HALL/KITCHEN/PARTTIME）, `status`（アカウント状態, ACTIVE/LOCKED/RETIRED）, `two_factor_enabled`（2要素認証有効） |
 
 > `company` を新設し `id`（サロゲートキー）を主キーとする。`company` から1ホップの直下テーブル
-> （`store`・`user`・`user_invitation`）は実FKの `company_id` を持つ（詳細は第7章1・`04_architecture.md`）。
+> （`store`・`user`）は実FKの `company_id` を持つ（詳細は第7章1・`04_architecture.md`）。
 > それ以外の業務テーブルは、テナント絞り込み用に `company_code` 列（FK制約なしの非正規化コピー）を保持する。
+>
+> 2026-09-11改訂：メールによる招待制（FR-A03）を廃止し、現場スタッフ本人がユーザー登録画面から
+> 自己登録する方式に一本化したため、`user_invitation` エンティティと `status=INVITED` は廃止した
+> （`02_requirements.md` FR-A03、`04_architecture.md` §3.1／§4／§6.1／§6.3）。既存DBの
+> `user_invitation` テーブルと `users_status_check` の `INVITED` は未使用の残置物であり、
+> 物理スキーマの追随（`V1__init_schema.sql` の直接編集）は別途対応する。
 
 ### 2.2 マスタ（メニュー・卓・コース・決済手段）
 
@@ -122,7 +127,7 @@
 
 | エンティティ | 区分 | 目的 | 主な属性（代表） |
 |--------------|:--:|------|------------------|
-| `audit_log`（監査ログ） | M | 重要操作の追記専用証跡 | `id`, `company_code`（テナント識別子）, `store_id`, `actor`（操作者, user_id or SYSTEM）, `action`（操作種別, LOGIN/PERMISSION_CHANGE/PAYMENT_SETTING_CHANGE/MENU_PRICE_CHANGE/ORDER_LINE_CANCEL_AFTER_SERVE/CHECK_FINALIZE/CHECK_VOID/REFUND/DISCOUNT/DAILY_CLOSE/TIMECLOCK_EDIT/DATA_EXPORT/...）, `target_type`（対象種別）, `target_id`（対象ID）, `before_summary`（変更前サマリ）, `after_summary`（変更後サマリ）, `ip`, `device`, `occurred_at`（発生日時） |
+| `audit_log`（監査ログ） | M | 重要操作の追記専用証跡 | `id`, `company_code`（テナント識別子）, `store_id`, `actor`（操作者, user_id or SYSTEM）, `action`（操作種別, LOGIN/PERMISSION_CHANGE/STORE_SETTING_CHANGE/PAYMENT_SETTING_CHANGE/TABLE_CHANGE/BUSINESS_DAY_CHANGE/RESERVATION_CHANGE/RESERVATION_CANCEL/MENU_PRICE_CHANGE/ORDER_LINE_CANCEL_AFTER_SERVE/CHECK_FINALIZE/CHECK_VOID/REFUND/DISCOUNT/DAILY_CLOSE/TIMECLOCK_EDIT/DATA_EXPORT/...。2026-09-16追補で卓・営業日・予約を追加）, `target_type`（対象種別）, `target_id`（対象ID）, `before_summary`（変更前サマリ）, `after_summary`（変更後サマリ）, `ip`, `device`, `occurred_at`（発生日時） |
 | `domain_event`（ドメインイベント） | (基盤) | 状態変化の時刻付き記録（分析・AI後付け用） | `id`, `company_code`（テナント識別子）, `store_id`, `aggregate_type`（集約種別, TABLE_SESSION/ORDER_LINE/CHECK/PAYMENT/DAILY_CLOSE）, `aggregate_id`（集約ID）, `event_type`（イベント種別, TABLE_OPENED/TABLE_CLOSED/LINE_ADDED/LINE_SERVED/LINE_CANCELLED/MOBILE_ORDER_SUBMITTED/MOBILE_ORDER_ACCEPTED/MOBILE_ORDER_REJECTED/CHECK_FINALIZED/REFUND_ISSUED/...）, `payload`（ペイロード, JSON）, `occurred_at`（発生日時）, `actor`（操作者） |
 | `outbound_message`（送信メッセージ） | S | メール／SMS の送信キューと結果（予約通知・シフト公開通知） | `id`, `store_id`, `type`（送信種別, EMAIL/SMS）, `to`（宛先）, `template`（テンプレート）, `status`（送信状態, QUEUED/SENT/FAILED）, `sent_at`（送信日時）, `error`（エラー内容） |
 
@@ -139,7 +144,6 @@
 erDiagram
     COMPANY ||--o{ STORE : has
     COMPANY ||--o{ USER : has
-    COMPANY ||--o{ USER_INVITATION : issues
     STORE  ||--|| STORE_SETTING : has
     STORE  ||--o{ MENU_CATEGORY : has
     STORE  ||--o{ MENU_ITEM : has
@@ -668,11 +672,12 @@ stateDiagram-v2
 
 1. ~~`company` と既存 `users`（`company_code` 文字列キー）の物理的な結合方法：`users` に `company_id` FK を足すか、`company_code` 参照のままにするか。~~
    **解決済み（`04_architecture.md` §3.1・§4.3）**：`company.id`（サロゲートキー）を主キーとし、他の全FK
-   （`store_id`→`store.id` 等）と一貫させて `store`・`users`・`user_invitation` に実FKの
+   （`store_id`→`store.id` 等）と一貫させて `store`・`users` に実FKの
    `company_id BIGINT REFERENCES company(id)` を追加する。`company` 自身が `company_code`（UK）を持つため、
-   `store`・`users`・`user_invitation` には `company_code` 列は一切持たせない（`users.company_code` も削除し、
-   複合ユニーク制約は `company_code + email` から `company_id + email` に変更する）。登録・ログイン画面で
-   利用者が入力する `company_code` は、`company` テーブルへの参照検索（`WHERE company_code = ?`）で
+   `store`・`users` には `company_code` 列は一切持たせない（`users.company_code` も削除し、
+   複合ユニーク制約は `company_code + email` から `company_id + email` に変更する）。`company_code` は
+   新規テナント登録では登録フォームの入力項目、ログイン以降はURLサブドメイン（`04_architecture.md`
+   §6.1）から入手し、いずれも `company` テーブルへの参照検索（`WHERE lower(company_code) = ?`）で
    `company_id` に変換してから使う。それ以外の業務テーブルの `company_code` 列は、`store_id` から
    `store.company_id` を辿れば会社を特定できるため実FKにはせず、テナント絞り込み用の非正規化コピー
    （FK制約なし）のまま維持する。
