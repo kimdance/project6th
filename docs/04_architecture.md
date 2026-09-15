@@ -1218,9 +1218,9 @@ public interface PaymentGateway {
 | 実装 | 方式 | 備考 |
 |------|------|------|
 | `CashPaymentGateway` | アプリ内完結（外部呼び出しなし） | 預り金・釣り銭計算のみ |
-| `PayPayPaymentGateway` | PayPay 加盟店API（動的QR）＋Webhook | 連携失敗時は `FAILED` を記録し、手入力の `SUCCESS` で消し込み（FR-G06） |
+| `PayPayPaymentGateway` | PayPay 加盟店API（動的QR＝ユーザースキャン方式を採用。ストアスキャン方式も同じ公開APIで対応可能）＋Webhook | 連携失敗時は `FAILED` を記録し、手入力の `SUCCESS` で消し込み（FR-G06） |
 | `CreditCardPaymentGateway` | 決済代行SDK（第一候補 Square）＋Webhook | サービス最終確定は `02` 11.1 の経営判断待ち |
-| `RakutenPayManualGateway` | 常に `is_manual_entry=true` で即時 `SUCCESS` | 店舗提示・QR表示（静的／動的）、ストアスキャンのいずれの運用でもシステム連携なし（FR-G07b） |
+| `RakutenPayManualGateway` | 常に `is_manual_entry=true` で即時 `SUCCESS` | 店舗提示・QR表示（静的／動的）、ストアスキャンのいずれの運用でもシステム連携なし。QR表示自体は無料の実店舗アプリで専用機材不要だが、決済結果の自動反映は「楽天ペイターミナル」＋個別提携済みレジ製品限定（本システムは対象外）のためフェーズ1は非対応（FR-G07b, FR-G07d） |
 
 ### 7.2 会計・決済フロー
 
