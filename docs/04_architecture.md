@@ -228,6 +228,17 @@
       （Web予約の申込。認証不要）。どちらもテナントの識別は他の未認証エンドポイントと同様
       `TenantResolutionInterceptor`（Hostヘッダのサブドメイン）で行い、`company_code` の解決方式
       自体（§6.1 冒頭）は変更しない。
+  - 2026-09-16 追補（メニュー管理の実装。FR-D01〜D03）：`menu_category`／`menu_item` テーブルは
+    `V1__init_schema.sql` の時点で作成済みだったが、アプリ層が未実装だったため実装した。エンドポイントは
+    §6.3 のとおり。フルの編集（登録・価格変更・並べ替え等）は `02` §3.2「メニューの編集」の権限
+    どおり経営管理者・店長のみ（`StoreAccessGuard#requireCanEdit`）、売り切れ・提供停止の切替
+    （FR-D03）は同表「メニューの売り切れ・提供停止の切替」の権限どおりホール・キッチンも行えるため、
+    `StoreAccessGuard#requireCanToggleMenuStatus` を新設して分離した（対象店舗に所属していない
+    ホール・キッチンは403）。期間限定メニュー（FR-D04。`available_from`／`available_to`）とトッピング等
+    の簡易オプション（FR-D05。`menu_option_group`／`menu_option`）は、物理スキーマはあるがアプリ層は
+    未実装のまま残した（フェーズ1の`S`区分のため後回し）。ホーム画面に `app_feature`（`feature_key
+    = 'menu'`）を追加し、経営管理者・店長・ホール・キッチンに表示（バイトは対象外）。監査ログは
+    `MENU_CHANGE` で記録する。実装は `MenuCategory`／`MenuItem`／`MenuService`／`MenuController`。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1173,7 +1184,7 @@ CREATE TABLE outbound_message (
 | ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
-| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories` | FR-D01〜D05 |
+| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
 | 卓・注文 | `POST /api/v1/stores/{storeId}/table-sessions`、`POST .../{id}/orders`、`PATCH .../order-lines/{id}` | FR-E01〜E07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
 | 会計 | `POST /api/v1/table-sessions/{id}/checks`、`POST .../checks/{id}/payments`、`POST .../checks/{id}/finalize`、`POST .../checks/{id}/refunds` | FR-G01〜G12 |
