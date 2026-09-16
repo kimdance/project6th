@@ -12,7 +12,8 @@ export type AuditAction =
   | 'TABLE_CHANGE'
   | 'BUSINESS_DAY_CHANGE'
   | 'RESERVATION_CHANGE'
-  | 'RESERVATION_CANCEL';
+  | 'RESERVATION_CANCEL'
+  | 'MENU_CHANGE';
 
 /** 操作種別の日本語表示名（AuditActions と対応。未知の値はそのままのコードを表示する）。 */
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
@@ -27,6 +28,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   BUSINESS_DAY_CHANGE: '営業日の変更',
   RESERVATION_CHANGE: '予約の登録・変更',
   RESERVATION_CANCEL: '予約のキャンセル',
+  MENU_CHANGE: 'メニューの登録・変更',
 };
 
 export function auditActionLabel(action: string): string {

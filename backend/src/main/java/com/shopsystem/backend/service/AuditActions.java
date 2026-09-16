@@ -18,6 +18,7 @@ public final class AuditActions {
     public static final String BUSINESS_DAY_CHANGE = "BUSINESS_DAY_CHANGE";
     public static final String RESERVATION_CHANGE = "RESERVATION_CHANGE";
     public static final String RESERVATION_CANCEL = "RESERVATION_CANCEL";
+    public static final String MENU_CHANGE = "MENU_CHANGE";
 
     private AuditActions() {
     }

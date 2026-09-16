@@ -11,6 +11,8 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
+
 /**
  * 店舗配下リソース（設定・卓・決済手段・営業日）に共通するテナント判定・権限チェック
  * （`02_requirements.md` §3.2 の権限マトリクス／04_architecture.md §3.2）。
@@ -60,6 +62,20 @@ public class StoreAccessGuard {
         TenantContext.Data ctx = TenantContext.get();
         boolean allowed = "OWNER".equals(ctx.role())
                 || (("MANAGER".equals(ctx.role()) || "HALL".equals(ctx.role())) && ctx.storeIds().contains(storeId));
+        if (!allowed) {
+            throw forbidden();
+        }
+    }
+
+    /**
+     * メニューの売り切れ・提供停止の切替（FR-D03）：経営管理者は全店、店長・ホール・キッチンは
+     * 自分が所属する店舗（複数可）のみ。バイトは不可（`02_requirements.md` §3.2）。
+     * フルの編集（登録・価格変更等）は {@link #requireCanEdit} のとおり経営管理者・店長のみ。
+     */
+    public void requireCanToggleMenuStatus(Long storeId) {
+        TenantContext.Data ctx = TenantContext.get();
+        boolean allowed = "OWNER".equals(ctx.role())
+                || (Set.of("MANAGER", "HALL", "KITCHEN").contains(ctx.role()) && ctx.storeIds().contains(storeId));
         if (!allowed) {
             throw forbidden();
         }

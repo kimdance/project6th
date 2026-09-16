@@ -8,6 +8,7 @@ import { Home } from './pages/Home';
 import { MyAccountPage } from './pages/MyAccountPage';
 import { StoreSettingsPage } from './pages/StoreSettingsPage';
 import { TablesPage } from './pages/TablesPage';
+import { MenuManagementPage } from './pages/MenuManagementPage';
 import { ReservationsPage } from './pages/ReservationsPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -116,6 +117,16 @@ function App() {
               element={
                 <RequireAuth>
                   <FeaturePlaceholder title="営業日" />
+                </RequireAuth>
+              }
+            />
+
+            {/* メニュー管理（登録・編集・売り切れ/提供停止の切替。FR-D01〜D03） */}
+            <Route
+              path="/settings/menu"
+              element={
+                <RequireAuth>
+                  <MenuManagementPage />
                 </RequireAuth>
               }
             />
