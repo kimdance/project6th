@@ -64,7 +64,7 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String role = "OWNER";
 
-    /** ACTIVE / LOCKED / INVITED */
+    /** ACTIVE / LOCKED / RETIRED */
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 

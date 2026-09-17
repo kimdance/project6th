@@ -54,9 +54,10 @@
 >
 > 2026-09-11改訂：メールによる招待制（FR-A03）を廃止し、現場スタッフ本人がユーザー登録画面から
 > 自己登録する方式に一本化したため、`user_invitation` エンティティと `status=INVITED` は廃止した
-> （`02_requirements.md` FR-A03、`04_architecture.md` §3.1／§4／§6.1／§6.3）。既存DBの
-> `user_invitation` テーブルと `users_status_check` の `INVITED` は未使用の残置物であり、
-> 物理スキーマの追随（`V1__init_schema.sql` の直接編集）は別途対応する。
+> （`02_requirements.md` FR-A03、`04_architecture.md` §3.1／§4／§6.1／§6.3）。既存DBに残っていた
+> `user_invitation` テーブルと `users_status_check` の `INVITED` は未使用の残置物だったが、
+> 2026-09-17にそれぞれ `V14__drop_user_invitation.sql`・`V8__users_retired_status.sql` で
+> 削除済み（詳細は `04_architecture.md` 冒頭の追補）。
 
 ### 2.2 マスタ（メニュー・卓・コース・決済手段）
 

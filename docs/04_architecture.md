@@ -60,7 +60,8 @@
     `user_invitation` エンティティ・テーブル、`users.status` の `INVITED` を廃止（`02_requirements.md`
     FR-A03、`03_domain_model.md` §2.1）。既存DBの `user_invitation` テーブルおよび
     `users_status_check` 制約中の `INVITED` は未使用の残置物として残っており、`V1__init_schema.sql`
-    からの削除と開発DBへの反映は別途対応する（対応時は既存データへの影響を要確認）。
+    からの削除と開発DBへの反映は別途対応する（対応時は既存データへの影響を要確認）。**2026-09-17に
+    対応済み（下記追補を参照）。**
   - 2026-09-11 追補（ホーム画面メニューのテーブル化）：ログイン後の共通トップ画面に並べる機能の
     入口を、フロント直書き（`features.ts`）からDB管理に変更した。`app_feature`（1機能＝1行。
     `feature_key`／`title`／`description`／`path`／`display_order`／`is_active`）と、表示可能ロールを
@@ -383,6 +384,16 @@
     揃えて変更した（3箇所のいずれか一つでもずれると、フロントとサーバーで異なる上限を案内して
     しまうため）。エンドポイント形状・権限・保存先・ファイル形式制限（JPEG／PNG／WEBPのみ）は
     変更していない。
+  - 2026-09-17 追補（`user_invitation` 残置物の削除）：2026-09-11のユーザー登録方式転換（招待制→
+    自己登録制、FR-A03）以降、未使用のまま残っていた残置物を片付けた。`users_status_check` 制約
+    からの `INVITED` 除外は既に `V8__users_retired_status.sql` で対応済みだったため、今回は
+    `user_invitation` テーブル本体が対象。参照元（リポジトリ・サービス・コントローラー）が
+    存在しないこと、開発DBの実データが0件であることを確認したうえで、
+    `V14__drop_user_invitation.sql`（`DROP TABLE user_invitation;`）で削除し、対応する
+    `UserInvitation` エンティティクラスも削除した。あわせて `User.java` の
+    `status` フィールドのコメントが `ACTIVE / LOCKED / INVITED`（廃止済みの値を含む）のまま
+    更新されていなかったため、実際の制約どおり `ACTIVE / LOCKED / RETIRED` に修正した。
+    機能・APIへの影響は無い。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -601,8 +612,8 @@ ALTER TABLE users
 
 -- user_invitation は廃止（2026-09-11改訂）。メールによる招待制（FR-A03）をやめ、現場スタッフ本人が
 -- ユーザー登録画面から自己登録する方式に一本化したため、招待トークンの発行・失効という仕組み自体が
--- 不要になった。既存DBに残る user_invitation テーブルと users_status_check の INVITED は未使用の
--- 残置物であり、V1__init_schema.sql からの削除は別途対応する（`02_requirements.md` FR-A03）。
+-- 不要になった。テーブル自体は V14__drop_user_invitation.sql で削除済み（2026-09-17）。
+-- users_status_check からの INVITED 除外は V8__users_retired_status.sql で対応済み。
 ```
 
 ### 4.4 マスタ（メニュー・卓・コース・決済手段）
