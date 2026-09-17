@@ -228,7 +228,7 @@ public class MenuService {
     private MenuCategory validateItem(Long storeId, MenuItemRequest req, String currentSalesStatus) {
         List<ErrorItem> errors = new ArrayList<>();
         if (!req.isActive() && currentSalesStatus != null && !"SUSPENDED".equals(currentSalesStatus)) {
-            errors.add(err("menu.error.active.requires-suspended", "active"));
+            errors.add(err("menu.error.sales-status.requires-active", "active"));
         }
         if (trimToNull(req.getName()) == null) {
             errors.add(err("menu.error.item-name.required", "name"));
