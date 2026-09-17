@@ -164,6 +164,9 @@ public class MenuService {
      * 売り切れ・提供停止の切替（FR-D03）。無効（{@code active == false}）なメニュー項目は、
      * {@link #validateItem} が課す「無効化する前に提供停止にしておく」制約の裏返しとして、
      * 提供停止以外へ変更することを許さない（先に {@link #updateItem} で有効化してから変更する）。
+     * また、所属カテゴリ（{@code menu_category}）が無効な場合は、メニュー項目自体が有効でも
+     * 「販売中」へは変更できない（無効カテゴリ配下は事実上お客様に見えない前提のため）。
+     * 売り切れ・提供停止への変更はカテゴリの有効・無効を問わず許可する。
      */
     @Transactional
     public MenuItemResponse updateSalesStatus(Long storeId, Long itemId, String salesStatus) {
@@ -179,6 +182,9 @@ public class MenuService {
         }
         if (!item.isActive() && !"SUSPENDED".equals(salesStatus)) {
             throw new BusinessException(List.of(err("menu.error.sales-status.requires-active", "salesStatus")));
+        }
+        if ("ON_SALE".equals(salesStatus) && !item.getCategory().isActive()) {
+            throw new BusinessException(List.of(err("menu.error.sales-status.category-inactive", "salesStatus")));
         }
         item.setSalesStatus(salesStatus);
         menuItemRepository.save(item);
