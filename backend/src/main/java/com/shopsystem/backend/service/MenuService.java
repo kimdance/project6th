@@ -113,7 +113,7 @@ public class MenuService {
         Store store = accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanEdit(storeId);
 
-        MenuCategory category = validateItem(storeId, req);
+        MenuCategory category = validateItem(storeId, req, null);
 
         MenuItem item = new MenuItem();
         item.setCompanyCode(TenantContext.get().companyCode());
@@ -136,7 +136,7 @@ public class MenuService {
                 .orElseThrow(accessGuard::notFound);
         String beforeSummary = summarizeItem(item);
 
-        MenuCategory category = validateItem(storeId, req);
+        MenuCategory category = validateItem(storeId, req, item.getSalesStatus());
 
         applyRequest(item, category, req);
         menuItemRepository.save(item);
@@ -209,9 +209,19 @@ public class MenuService {
         return name;
     }
 
-    /** フィールド検証とカテゴリの存在確認をまとめて行い、有効なカテゴリを返す。 */
-    private MenuCategory validateItem(Long storeId, MenuItemRequest req) {
+    /**
+     * フィールド検証とカテゴリの存在確認をまとめて行い、有効なカテゴリを返す。
+     * {@code currentSalesStatus} は更新対象の既存メニュー項目の現在の販売状況（新規登録時は
+     * {@code null}）。無効化する（{@code req.isActive() == false}）場合は、既にお客様へ提供
+     * されなくなっている状態にしてから畳む運用とするため、事前に「提供停止」へ切り替えておく
+     * ことを必須とする。新規登録時はこのチェックを行わない（登録直後は必ず販売中スタートで、
+     * 提供停止へ切り替える手段が登録前には無いため）。
+     */
+    private MenuCategory validateItem(Long storeId, MenuItemRequest req, String currentSalesStatus) {
         List<ErrorItem> errors = new ArrayList<>();
+        if (!req.isActive() && currentSalesStatus != null && !"SUSPENDED".equals(currentSalesStatus)) {
+            errors.add(err("menu.error.active.requires-suspended", "active"));
+        }
         if (trimToNull(req.getName()) == null) {
             errors.add(err("menu.error.item-name.required", "name"));
         }

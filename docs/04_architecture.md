@@ -261,6 +261,15 @@
     `MenuManagementPage`（フロントエンドのみ）の変更で完結する。絞り込みの初期値はすべて
     「すべて」（既存動作を変えないため）。実装は `MenuManagementPage.tsx` の `ItemList`／
     `CategoryList`。
+  - 2026-09-17 追補（メニュー項目を無効化する際は先に「提供停止」への切替を必須化。FR-D01・D03）：
+    メニュー項目を`PUT /api/v1/stores/{storeId}/menu-items/{itemId}`で無効化（`active: false`）
+    する際、既存の販売状況（`sales_status`）が`SUSPENDED`（提供停止）でなければ400エラーとする
+    （`menu.error.active.requires-suspended`）。お客様へ提供されなくなっている状態を確認してから
+    畳む運用にするための制約。新規登録（`POST .../menu-items`）はこのチェックの対象外とする
+    （登録直後は必ず`ON_SALE`スタートで、登録前に提供停止へ切り替える手段が無いため）。
+    販売状況自体の変更は従来どおり別エンドポイント（`PATCH .../sales-status`）で行う必要があり、
+    メニュー編集画面にも同エンドポイントを呼ぶ切替ボタンを追加済み（2026-09-17の別追補）。
+    実装は `MenuService#validateItem`（第3引数 `currentSalesStatus` を追加）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
