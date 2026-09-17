@@ -4,13 +4,21 @@ import com.shopsystem.backend.service.FileStorageService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.core.Ordered;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import jakarta.servlet.Filter;
+
 import java.nio.file.Path;
+import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
@@ -48,14 +56,34 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/uploads/**").addResourceLocations(location);
     }
 
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        // 開発用：フロント（Vite, 5173番ポート）とバックエンド（8080番ポート）がサブドメインは
-        // 同じでもポートが異なるため別オリジン扱いになる。認証は Bearer トークンでCookieを
-        // 使わないため allowCredentials は不要。本番のオリジン許可方針は別途検討する。
-        registry.addMapping("/api/v1/**")
-                .allowedOriginPatterns("http://*.localhost:5173", "http://localhost:5173")
-                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
-                .allowedHeaders("*");
+    /**
+     * CORSは {@code WebMvcConfigurer#addCorsMappings}（HandlerMapping経由）ではなく、
+     * サーブレット {@link Filter} として登録する。{@code addCorsMappings} 方式は
+     * {@code DispatcherServlet#getHandler} の内部で適用されるため、それより前段の
+     * {@code DispatcherServlet#checkMultipart}（マルチパート解析）で例外
+     * （{@link org.springframework.web.multipart.MaxUploadSizeExceededException} 等）が
+     * 発生した場合はCORSヘッダが一切付与されない。その結果、バックエンドは
+     * 「写真ファイルが大きすぎます」等の正しい400を返しているにもかかわらず、
+     * ブラウザ側はCORS違反として応答をJSへ渡さず、フロントには汎用の通信エラー
+     * （実際のエラーメッセージが握りつぶされる）として見えてしまう不具合があった
+     * （メニュー写真アップロード、FR-D01。2026-09-17）。Filterはリクエスト処理全体を
+     * 包むため、例外の発生段階によらず一貫してCORSヘッダを付与できる。
+     * 開発用：フロント（Vite, 5173番ポート）とバックエンド（8080番ポート）はサブドメインが
+     * 同じでもポートが異なるため別オリジン扱いになる。認証は Bearer トークンでCookieを
+     * 使わないため allowCredentials は不要。本番のオリジン許可方針は別途検討する。
+     */
+    @Bean
+    public FilterRegistrationBean<CorsFilter> corsFilter() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(List.of("http://*.localhost:5173", "http://localhost:5173"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
+        config.setAllowedHeaders(List.of("*"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/v1/**", config);
+
+        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(source));
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return bean;
     }
 }
