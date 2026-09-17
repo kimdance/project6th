@@ -130,6 +130,17 @@ cd project6th/backend
 
 `http://localhost:8080` で起動する。起動時のログでFlywayのマイグレーションが流れることを確認する。
 
+> **既知の落とし穴（WSL2）**：JVMがワイルドカードアドレスをIPv6ソケット（`[::]:8080`）として
+> 開いてしまうことがある（この開発機で実際に発生。2026-09-17）。WSL2のWindows→WSL2
+> localhostポートフォワーディングはIPv4ソケットを基準に転送対象を判定するため、その場合
+> `curl http://localhost:8080/...`（WSL内から）は成功するのに、**Windows側のブラウザからは
+> 一切繋がらない**（画面は開けるが、開いた後の一部のAPI呼び出しだけ原因不明に失敗するように
+> 見えることがある）。切り分け方：Windows PowerShellで
+> `Test-NetConnection -ComputerName 127.0.0.1 -Port 8080` を実行し `TcpTestSucceeded` が
+> `False` なら本事象。対策として `BackendApplication#main` の先頭で
+> `System.setProperty("java.net.preferIPv4Stack", "true")` を設定し、IPv4での待受を強制して
+> いる（`application.properties` の `server.address=0.0.0.0` だけでは直らなかった）。
+
 ---
 
 ## 7. フロントエンドを起動する `[未検証]`
