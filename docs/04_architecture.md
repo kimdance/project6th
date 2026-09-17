@@ -350,6 +350,30 @@
     `menu.error.sales-status.category-inactive` も「カテゴリが無効の場合、設定する販売状況は
     「提供停止」にしてください。」に改めた（`menu.error.sales-status.requires-active` と同じ
     言い回しに統一）。
+  - 2026-09-17 追補（メニュー写真アップロードの5MB超エラーを修正・実機確認。FR-D01）：
+    ブラウザ実機（Windows Chrome→WSL2開発機）でメニュー写真アップロードを検証したところ、
+    5MB超のファイルを送った際に (a) エラーメッセージが握りつぶされ「写真のアップロードに
+    失敗しました。」としか表示されない不具合と、(b) 送信そのものがハング・タイムアウトする
+    不具合の2つが見つかり、修正した。(a) の原因は、`spring.servlet.multipart.max-file-size`
+    （5MB）超過時の400応答が `DispatcherServlet#checkMultipart`（マルチパート解析）の段階で
+    発生し、`WebMvcConfigurer#addCorsMappings` によるCORSはそれより後段のHandlerMapping経由
+    のため適用されないこと。CORSヘッダが付かない応答をブラウザがCORS違反とみなし、fetch()の
+    呼び出し元へレスポンスを渡さなかった。CORSをリクエスト処理全体を包む `Filter`
+    （`CorsFilter`、`FilterRegistrationBean` で `HIGHEST_PRECEDENCE` 登録）に切り替え、
+    例外の発生段階によらず一貫してCORSヘッダを付与するようにした（`WebConfig#corsFilter`）。
+    (b) の原因は、5MB超のファイルはマルチパート解析時点でサーバーが応答しようとするため、
+    クライアントがリクエストボディを送信し終える前にサーバーが応答する形になり、WSL2開発機
+    ではWindows→WSL2のlocalhostポートフォワーディング中継（wslrelay）がこのパターンを
+    扱えずハング・タイムアウトすること。送信前にクライアント側でファイルサイズを判定し、
+    5MB超なら通信せずその場で「写真ファイルが大きすぎます（5MBまでです）。」を表示するように
+    変更した（`MenuManagementPage.tsx` の `uploadPhotoFile`。ファイル選択・カメラ撮影の両経路
+    がここを通るため1箇所の修正で両方に効く）。エンドポイント（`POST .../menu-items/photo`）
+    自体や権限の扱いに変更は無い。あわせて、開発機がWSL2の場合にバックエンド（Tomcat）が
+    IPv6ソケットのみで待ち受けてWindows側から到達できない別不具合も見つかり、
+    `java.net.preferIPv4Stack=true` の強制設定で対処した（FR-D01固有ではなく開発環境全般の
+    問題のため、詳細は `docs/ops/dev-machine-setup.md` を参照）。以上の修正後、ブラウザ実機
+    （Windows Chrome、`http://<company_code>.localhost:5173`）で写真の選択・アップロード・
+    一覧表示までを実際に操作して動作確認済み。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
