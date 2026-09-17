@@ -62,6 +62,16 @@ const emptyItemForm = (categoryId: number): MenuItemRequest => ({
 
 type Tab = 'items' | 'categories';
 type View = 'select-store' | 'list' | 'form';
+type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+
+const ACTIVE_FILTER_LABELS: Record<ActiveFilter, string> = {
+  ALL: 'すべて',
+  ACTIVE: '有効のみ',
+  INACTIVE: '無効のみ',
+};
+
+const matchesActiveFilter = (filter: ActiveFilter, active: boolean) =>
+  filter === 'ALL' || (filter === 'ACTIVE') === active;
 
 /**
  * メニュー管理画面（FR-D01〜D03）。
@@ -94,6 +104,10 @@ export const MenuManagementPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const [categoryActiveFilter, setCategoryActiveFilter] = useState<ActiveFilter>('ALL');
+  const [itemActiveFilter, setItemActiveFilter] = useState<ActiveFilter>('ALL');
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<number | 'ALL'>('ALL');
 
   useEffect(() => {
     let cancelled = false;
@@ -347,6 +361,14 @@ export const MenuManagementPage: React.FC = () => {
   const editable = selectedStoreId !== null && canEditFull(selectedStoreId);
   const toggleable = selectedStoreId !== null && canToggleStatus(selectedStoreId);
 
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const filteredCategories = categories.filter((c) => matchesActiveFilter(categoryActiveFilter, c.active));
+  const filteredItems = items.filter(
+    (i) =>
+      matchesActiveFilter(itemActiveFilter, i.active) &&
+      (itemCategoryFilter === 'ALL' || i.categoryId === itemCategoryFilter)
+  );
+
   return (
     <div style={{ maxWidth: '560px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
       <h2>メニュー管理</h2>
@@ -396,15 +418,49 @@ export const MenuManagementPage: React.FC = () => {
           )}
 
           {view === 'list' && tab === 'items' && (
-            <ItemList
-              items={items}
-              editable={editable}
-              toggleable={toggleable}
-              onEdit={openEditItem}
-              onToggle={toggleStatus}
-              onCreate={openCreateItem}
-              canCreate={editable && categories.length > 0}
-            />
+            <>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                <label style={{ fontSize: '13px' }}>
+                  状態:{' '}
+                  <select
+                    value={itemActiveFilter}
+                    onChange={(e) => setItemActiveFilter(e.target.value as ActiveFilter)}
+                  >
+                    {(Object.keys(ACTIVE_FILTER_LABELS) as ActiveFilter[]).map((f) => (
+                      <option key={f} value={f}>
+                        {ACTIVE_FILTER_LABELS[f]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ fontSize: '13px' }}>
+                  カテゴリ:{' '}
+                  <select
+                    value={itemCategoryFilter}
+                    onChange={(e) =>
+                      setItemCategoryFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))
+                    }
+                  >
+                    <option value="ALL">すべて</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <ItemList
+                items={filteredItems}
+                categoryById={categoryById}
+                editable={editable}
+                toggleable={toggleable}
+                onEdit={openEditItem}
+                onToggle={toggleStatus}
+                onCreate={openCreateItem}
+                canCreate={editable && categories.length > 0}
+              />
+            </>
           )}
 
           {view === 'list' && tab === 'items' && editable && categories.length === 0 && (
@@ -414,12 +470,29 @@ export const MenuManagementPage: React.FC = () => {
           )}
 
           {view === 'list' && tab === 'categories' && (
-            <CategoryList
-              categories={categories}
-              editable={editable}
-              onEdit={openEditCategory}
-              onCreate={openCreateCategory}
-            />
+            <>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontSize: '13px' }}>
+                  状態:{' '}
+                  <select
+                    value={categoryActiveFilter}
+                    onChange={(e) => setCategoryActiveFilter(e.target.value as ActiveFilter)}
+                  >
+                    {(Object.keys(ACTIVE_FILTER_LABELS) as ActiveFilter[]).map((f) => (
+                      <option key={f} value={f}>
+                        {ACTIVE_FILTER_LABELS[f]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <CategoryList
+                categories={filteredCategories}
+                editable={editable}
+                onEdit={openEditCategory}
+                onCreate={openCreateCategory}
+              />
+            </>
           )}
 
           {view === 'list' && stores.length > 1 && (
@@ -633,16 +706,19 @@ export const MenuManagementPage: React.FC = () => {
 
 const ItemList: React.FC<{
   items: MenuItem[];
+  categoryById: Map<number, MenuCategory>;
   editable: boolean;
   toggleable: boolean;
   onEdit: (item: MenuItem) => void;
   onToggle: (item: MenuItem, nextStatus: SalesStatus) => void;
   onCreate: () => void;
   canCreate: boolean;
-}> = ({ items, editable, toggleable, onEdit, onToggle, onCreate, canCreate }) => (
+}> = ({ items, categoryById, editable, toggleable, onEdit, onToggle, onCreate, canCreate }) => (
   <div style={{ marginBottom: '15px' }}>
-    {items.length === 0 && <p style={{ color: '#666' }}>メニューがまだ登録されていません。</p>}
-    {items.map((item) => (
+    {items.length === 0 && <p style={{ color: '#666' }}>該当するメニューがありません。</p>}
+    {items.map((item) => {
+      const categoryInactive = categoryById.get(item.categoryId)?.active === false;
+      return (
       <div
         key={item.id}
         style={{
@@ -667,6 +743,11 @@ const ItemList: React.FC<{
             <div style={{ fontSize: '13px', color: '#666' }}>
               {item.categoryName} ・ {item.priceJpy.toLocaleString()}円 ・ {TAX_CATEGORY_LABELS[item.taxCategory]}
             </div>
+            {categoryInactive && (
+              <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '2px' }}>
+                ⚠ カテゴリ「{item.categoryName}」は無効になっています
+              </div>
+            )}
           </div>
           <span
             style={{
@@ -707,7 +788,8 @@ const ItemList: React.FC<{
           </div>
         )}
       </div>
-    ))}
+      );
+    })}
     {canCreate && (
       <button type="button" onClick={onCreate} style={addButtonStyle}>
         ＋ 新しいメニューを追加
@@ -723,7 +805,7 @@ const CategoryList: React.FC<{
   onCreate: () => void;
 }> = ({ categories, editable, onEdit, onCreate }) => (
   <div style={{ marginBottom: '15px' }}>
-    {categories.length === 0 && <p style={{ color: '#666' }}>カテゴリがまだ登録されていません。</p>}
+    {categories.length === 0 && <p style={{ color: '#666' }}>該当するカテゴリがありません。</p>}
     {categories.map((category) => (
       <button
         key={category.id}

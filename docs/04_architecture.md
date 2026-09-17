@@ -251,6 +251,16 @@
     推測困難なUUID）。許可する形式はJPEG／PNG／WEBPのみ、上限5MB（`spring.servlet.multipart.
     max-file-size`。超過時は`GlobalExceptionHandler`が400を返す）。実装は
     `FileStorageService`／`MenuService#uploadItemPhoto`／`MenuController#uploadItemPhoto`。
+  - 2026-09-17 追補（メニュー管理画面の「有効/無効」絞り込みと不整合の警告表示。FR-D01・D02）：
+    `menu_category`／`menu_item` の `is_active` はDB更新時に連動処理を行わない設計（カテゴリを
+    無効にしても配下のメニュー項目は自動では無効化されない）だが、その状態を運用時に見つけやすく
+    するため画面側のみ変更した。①カテゴリ一覧に状態（すべて／有効のみ／無効のみ）の絞り込みを
+    追加、②メニュー項目一覧に状態と所属カテゴリの絞り込みを追加、③メニュー項目一覧で「有効な
+    項目が無効なカテゴリに属している」場合に警告文（「⚠ カテゴリ「〇〇」は無効になっています」）
+    を表示。いずれも一覧はもともと店舗内の全件を一括取得しているため、API・DBの変更は無く
+    `MenuManagementPage`（フロントエンドのみ）の変更で完結する。絞り込みの初期値はすべて
+    「すべて」（既存動作を変えないため）。実装は `MenuManagementPage.tsx` の `ItemList`／
+    `CategoryList`。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
