@@ -176,6 +176,11 @@ export const MenuManagementPage: React.FC = () => {
     const [categoryList, itemList] = await Promise.all([fetchMenuCategories(storeId), fetchMenuItems(storeId)]);
     setCategories(categoryList);
     setItems(itemList);
+    // 別の店舗のカテゴリIDを引きずらないよう、店舗を切り替えるたびに絞り込み条件をリセットする。
+    setCategoryActiveFilter('ALL');
+    setItemActiveFilter('ALL');
+    setItemCategoryFilter('ALL');
+    setItemSalesStatusFilter('ALL');
   };
 
   const selectStore = async (storeId: number) => {
@@ -289,6 +294,7 @@ export const MenuManagementPage: React.FC = () => {
     if (selectedStoreId === null) {
       return;
     }
+    stopCamera();
     resetMessages();
     setSaving(true);
     try {
