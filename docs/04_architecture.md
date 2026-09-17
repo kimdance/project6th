@@ -374,6 +374,15 @@
     問題のため、詳細は `docs/ops/dev-machine-setup.md` を参照）。以上の修正後、ブラウザ実機
     （Windows Chrome、`http://<company_code>.localhost:5173`）で写真の選択・アップロード・
     一覧表示までを実際に操作して動作確認済み。
+  - 2026-09-17 追補（メニュー写真アップロードの上限を50MBに拡大。FR-D01）：上記までの一連の
+    実機確認を経て、上限値そのものを引き上げた。実際に店舗スタッフが撮影したメニュー写真の
+    最大サイズがおよそ25.5MBだったため、5MBでは不足すると判明し、余裕を見て50MBへ変更した。
+    サーバー側（`spring.servlet.multipart.max-file-size`／`max-request-size`）・案内メッセージ
+    （`messages.properties` の `menu.error.photo.too-large`）・フロント側の送信前チェック
+    （`MenuManagementPage.tsx` の `MAX_PHOTO_SIZE_BYTES`／`PHOTO_TOO_LARGE_MESSAGE`）の3箇所を
+    揃えて変更した（3箇所のいずれか一つでもずれると、フロントとサーバーで異なる上限を案内して
+    しまうため）。エンドポイント形状・権限・保存先・ファイル形式制限（JPEG／PNG／WEBPのみ）は
+    変更していない。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
