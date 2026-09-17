@@ -22,6 +22,19 @@ import {
   type SalesStatus,
 } from '../api/menu';
 
+/**
+ * バックエンドの spring.servlet.multipart.max-file-size（5MB）と同じ上限。サーバー側の
+ * チェックだけに頼らず、送信前にここで弾く。理由は二つ：(1) 5MB超は不正なファイルとして
+ * サーバー側マルチパート解析の時点（Spring MVCのハンドラに到達する前）で例外になり、
+ * クライアントがボディを送り切る前にサーバーが応答を返そうとする形になる。開発機がWSL2の
+ * 場合、この「クライアントが送信中にサーバーが先に応答する」パターンはWindows→WSL2の
+ * localhostポートフォワーディング中継（wslrelay）がうまく扱えず、リクエストがハングして
+ * タイムアウトすることを確認した（docs/ops/dev-machine-setup.md）。(2) 素直に無駄な
+ * アップロード帯域・時間を避けられる。
+ */
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
+const PHOTO_TOO_LARGE_MESSAGE = '写真ファイルが大きすぎます（5MBまでです）。';
+
 const TAX_CATEGORY_LABELS: Record<TaxCategory, string> = {
   STANDARD_10: '標準10%',
   REDUCED_8: '軽減税率8%',
@@ -342,6 +355,10 @@ export const MenuManagementPage: React.FC = () => {
       return;
     }
     resetMessages();
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      setMessages([PHOTO_TOO_LARGE_MESSAGE]);
+      return;
+    }
     setUploadingPhoto(true);
     try {
       const result = await uploadMenuItemPhoto(selectedStoreId, file);
