@@ -97,6 +97,7 @@ export const MenuManagementPage: React.FC = () => {
   const [categoryForm, setCategoryForm] = useState<MenuCategoryRequest>(EMPTY_CATEGORY_FORM);
 
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemForm, setItemForm] = useState<MenuItemRequest>(emptyItemForm(0));
 
   const [messages, setMessages] = useState<string[]>([]);
@@ -230,6 +231,7 @@ export const MenuManagementPage: React.FC = () => {
   const openCreateItem = () => {
     resetMessages();
     setEditingItemId(null);
+    setEditingItem(null);
     setItemForm(emptyItemForm(categories[0]?.id ?? 0));
     setTab('items');
     setView('form');
@@ -238,6 +240,7 @@ export const MenuManagementPage: React.FC = () => {
   const openEditItem = (item: MenuItem) => {
     resetMessages();
     setEditingItemId(item.id);
+    setEditingItem(item);
     setItemForm({
       categoryId: item.categoryId,
       name: item.name,
@@ -319,6 +322,7 @@ export const MenuManagementPage: React.FC = () => {
     const result = await updateMenuItemSalesStatus(selectedStoreId, item.id, nextStatus);
     if (result.ok) {
       setItems((prev) => prev.map((i) => (i.id === item.id ? result.item : i)));
+      setEditingItem((prev) => (prev && prev.id === item.id ? result.item : prev));
       setSuccessMessage(`「${result.item.name}」を${SALES_STATUS_LABELS[nextStatus]}にしました。`);
     } else {
       setMessages(result.errors.map((err) => err.message));
@@ -552,6 +556,30 @@ export const MenuManagementPage: React.FC = () => {
 
           {view === 'form' && tab === 'items' && (
             <form onSubmit={handleItemSubmit}>
+              {editingItem && (
+                <div
+                  style={{
+                    marginBottom: '15px',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    background: '#fafafa',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '13px', color: '#666' }}>販売状況</span>
+                    <SalesStatusBadge status={editingItem.salesStatus} />
+                  </div>
+                  <SalesStatusButtons item={editingItem} onToggle={toggleStatus} />
+                </div>
+              )}
               <FormField label="カテゴリ">
                 <select
                   value={itemForm.categoryId}
@@ -749,42 +777,11 @@ const ItemList: React.FC<{
               </div>
             )}
           </div>
-          <span
-            style={{
-              flexShrink: 0,
-              padding: '2px 8px',
-              borderRadius: '10px',
-              fontSize: '12px',
-              color: '#fff',
-              backgroundColor: SALES_STATUS_COLORS[item.salesStatus],
-            }}
-          >
-            {SALES_STATUS_LABELS[item.salesStatus]}
-          </span>
+          <SalesStatusBadge status={item.salesStatus} />
         </div>
         {toggleable && (
-          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-            {(['ON_SALE', 'SOLD_OUT', 'SUSPENDED'] as const)
-              .filter((s) => s !== item.salesStatus)
-              .map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => onToggle(item, s)}
-                  style={{
-                    flex: 1,
-                    padding: '6px',
-                    fontSize: '13px',
-                    backgroundColor: '#fff',
-                    color: '#333',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {SALES_STATUS_LABELS[s]}にする
-                </button>
-              ))}
+          <div style={{ marginTop: '10px' }}>
+            <SalesStatusButtons item={item} onToggle={onToggle} />
           </div>
         )}
       </div>
@@ -795,6 +792,50 @@ const ItemList: React.FC<{
         ＋ 新しいメニューを追加
       </button>
     )}
+  </div>
+);
+
+const SalesStatusBadge: React.FC<{ status: SalesStatus }> = ({ status }) => (
+  <span
+    style={{
+      flexShrink: 0,
+      padding: '2px 8px',
+      borderRadius: '10px',
+      fontSize: '12px',
+      color: '#fff',
+      backgroundColor: SALES_STATUS_COLORS[status],
+    }}
+  >
+    {SALES_STATUS_LABELS[status]}
+  </span>
+);
+
+const SalesStatusButtons: React.FC<{ item: MenuItem; onToggle: (item: MenuItem, nextStatus: SalesStatus) => void }> = ({
+  item,
+  onToggle,
+}) => (
+  <div style={{ display: 'flex', gap: '8px' }}>
+    {(['ON_SALE', 'SOLD_OUT', 'SUSPENDED'] as const)
+      .filter((s) => s !== item.salesStatus)
+      .map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onToggle(item, s)}
+          style={{
+            flex: 1,
+            padding: '6px',
+            fontSize: '13px',
+            backgroundColor: '#fff',
+            color: '#333',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          {SALES_STATUS_LABELS[s]}にする
+        </button>
+      ))}
   </div>
 );
 
