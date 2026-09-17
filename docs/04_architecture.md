@@ -277,7 +277,7 @@
     不変条件を、無効化する方向・販売状況を変える方向の両方から担保する。再度販売したい場合は、
     先に`PUT .../menu-items/{itemId}`で有効化してから販売状況を変更する必要がある。
     2つの方向のエラーメッセージは内容が実質同じであるため、`menu.error.sales-status.
-    requires-active`「メニューを無効にする場合、販売状況を「提供停止」にしてください。」に
+    requires-active`「メニューが無効の場合、設定する販売状況は「提供停止」にしてください。」に
     統一した（`menu.error.active.requires-suspended`は廃止）。実装は
     `MenuService#validateItem`／`MenuService#updateSalesStatus`。
   - 2026-09-17 追補（メニュー写真をブラウザ内カメラ撮影にも対応。FR-D01）：ファイル選択に加え、
