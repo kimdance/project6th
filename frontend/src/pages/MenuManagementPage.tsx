@@ -240,7 +240,14 @@ export const MenuManagementPage: React.FC = () => {
           : await updateMenuCategory(selectedStoreId, editingCategoryId, categoryForm);
 
       if (result.ok) {
-        setCategories(await fetchMenuCategories(selectedStoreId));
+        const [categoryList, itemList] = await Promise.all([
+          fetchMenuCategories(selectedStoreId),
+          // カテゴリを無効化すると配下のメニュー項目が一括で「提供停止」になるため、
+          // 一覧側の表示も合わせて更新する。
+          fetchMenuItems(selectedStoreId),
+        ]);
+        setCategories(categoryList);
+        setItems(itemList);
         setView('list');
         setSuccessMessage(`「${result.category.name}」を保存しました。`);
         return;

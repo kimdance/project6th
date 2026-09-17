@@ -77,6 +77,13 @@ public class MenuService {
         return toCategoryResponse(category);
     }
 
+    /**
+     * カテゴリの更新（FR-D02）。有効から無効へ切り替える場合、配下の全メニュー項目の販売状況を
+     * 一括で「提供停止」にする（{@link #updateSalesStatus} が課す「所属カテゴリが無効なら
+     * 提供停止のみ許可」を、無効化した瞬間から矛盾なく成立させるため）。メニュー項目自体の
+     * 有効・無効（{@code is_active}）は連動させない（配下の商品を残したまま一時的に畳む運用も
+     * 想定するため）。
+     */
     @Transactional
     public MenuCategoryResponse updateCategory(Long storeId, Long categoryId, MenuCategoryRequest req) {
         accessGuard.requireStoreInTenant(storeId);
@@ -85,6 +92,7 @@ public class MenuService {
         MenuCategory category = menuCategoryRepository.findByIdAndStore_Id(categoryId, storeId)
                 .orElseThrow(accessGuard::notFound);
         String beforeSummary = summarizeCategory(category);
+        boolean wasActive = category.isActive();
 
         String name = validateCategory(req);
 
@@ -96,7 +104,24 @@ public class MenuService {
         auditLogService.recordForCurrentUser(AuditActions.MENU_CHANGE, storeId, "MENU_CATEGORY", category.getId(),
                 beforeSummary, summarizeCategory(category));
 
+        if (wasActive && !req.isActive()) {
+            suspendAllItemsInCategory(storeId, category);
+        }
+
         return toCategoryResponse(category);
+    }
+
+    private void suspendAllItemsInCategory(Long storeId, MenuCategory category) {
+        for (MenuItem item : menuItemRepository.findAllByCategory_Id(category.getId())) {
+            if ("SUSPENDED".equals(item.getSalesStatus())) {
+                continue;
+            }
+            String beforeItemSummary = summarizeItem(item);
+            item.setSalesStatus("SUSPENDED");
+            menuItemRepository.save(item);
+            auditLogService.recordForCurrentUser(AuditActions.MENU_CHANGE, storeId, "MENU_ITEM", item.getId(),
+                    beforeItemSummary, summarizeItem(item));
+        }
     }
 
     // ---- メニュー項目（FR-D01・D03） ----
@@ -119,10 +144,11 @@ public class MenuService {
         item.setCompanyCode(TenantContext.get().companyCode());
         item.setStore(store);
         applyRequest(item, category, req);
-        if (!req.isActive()) {
+        if (!req.isActive() || !category.isActive()) {
             // 新規登録時は販売状況を選べないためエンティティの既定値（ON_SALE）のままだと、
-            // 「無効なら提供停止」という不変条件（updateSalesStatus・validateItem参照）に
-            // 反した状態で保存されてしまう。無効で登録する場合はここで提供停止にしておく。
+            // 「メニュー項目・所属カテゴリが無効なら提供停止のみ」という不変条件
+            // （updateSalesStatus参照）に反した状態で保存されてしまう。無効な項目・無効な
+            // カテゴリへの登録では、ここで提供停止にしておく。
             item.setSalesStatus("SUSPENDED");
         }
         item = menuItemRepository.save(item);
@@ -145,6 +171,12 @@ public class MenuService {
         MenuCategory category = validateItem(storeId, req, item.getSalesStatus());
 
         applyRequest(item, category, req);
+        if (!category.isActive() && !"SUSPENDED".equals(item.getSalesStatus())) {
+            // カテゴリ選択欄には無効なカテゴリも表示されるため、既存の有効な商品を無効カテゴリへ
+            // 付け替えることができてしまう。その場合も「無効カテゴリなら提供停止のみ」の不変
+            // 条件を保つため、ここで提供停止に補正する（updateCategoryの一括提供停止と対）。
+            item.setSalesStatus("SUSPENDED");
+        }
         menuItemRepository.save(item);
 
         auditLogService.recordForCurrentUser(AuditActions.MENU_CHANGE, storeId, "MENU_ITEM", item.getId(),
@@ -167,12 +199,12 @@ public class MenuService {
     }
 
     /**
-     * 売り切れ・提供停止の切替（FR-D03）。無効（{@code active == false}）なメニュー項目は、
-     * {@link #validateItem} が課す「無効化する前に提供停止にしておく」制約の裏返しとして、
-     * 提供停止以外へ変更することを許さない（先に {@link #updateItem} で有効化してから変更する）。
-     * また、所属カテゴリ（{@code menu_category}）が無効な場合は、メニュー項目自体が有効でも
-     * 「販売中」へは変更できない（無効カテゴリ配下は事実上お客様に見えない前提のため）。
-     * 売り切れ・提供停止への変更はカテゴリの有効・無効を問わず許可する。
+     * 売り切れ・提供停止の切替（FR-D03）。メニュー項目自体が無効（{@code active == false}）な
+     * 場合、または所属カテゴリ（{@code menu_category}）が無効な場合は、提供停止以外への変更を
+     * 一切許さない（無効なメニュー・無効カテゴリ配下は事実上お客様に見えない前提のため）。
+     * 前者は {@link #validateItem} が課す「無効化する前に提供停止にしておく」制約の裏返しで、
+     * 先に {@link #updateItem} で有効化してから変更する。後者はカテゴリを再度有効化するか、
+     * カテゴリ側で配下メニューを一括提供停止にする {@link #updateCategory} の処理と対になる。
      */
     @Transactional
     public MenuItemResponse updateSalesStatus(Long storeId, Long itemId, String salesStatus) {
@@ -186,11 +218,13 @@ public class MenuService {
         if (salesStatus == null || !VALID_SALES_STATUSES.contains(salesStatus)) {
             throw new BusinessException(List.of(err("menu.error.sales-status.invalid", "salesStatus")));
         }
-        if (!item.isActive() && !"SUSPENDED".equals(salesStatus)) {
-            throw new BusinessException(List.of(err("menu.error.sales-status.requires-active", "salesStatus")));
-        }
-        if ("ON_SALE".equals(salesStatus) && !item.getCategory().isActive()) {
-            throw new BusinessException(List.of(err("menu.error.sales-status.category-inactive", "salesStatus")));
+        if (!"SUSPENDED".equals(salesStatus)) {
+            if (!item.isActive()) {
+                throw new BusinessException(List.of(err("menu.error.sales-status.requires-active", "salesStatus")));
+            }
+            if (!item.getCategory().isActive()) {
+                throw new BusinessException(List.of(err("menu.error.sales-status.category-inactive", "salesStatus")));
+            }
         }
         item.setSalesStatus(salesStatus);
         menuItemRepository.save(item);
