@@ -119,6 +119,12 @@ public class MenuService {
         item.setCompanyCode(TenantContext.get().companyCode());
         item.setStore(store);
         applyRequest(item, category, req);
+        if (!req.isActive()) {
+            // 新規登録時は販売状況を選べないためエンティティの既定値（ON_SALE）のままだと、
+            // 「無効なら提供停止」という不変条件（updateSalesStatus・validateItem参照）に
+            // 反した状態で保存されてしまう。無効で登録する場合はここで提供停止にしておく。
+            item.setSalesStatus("SUSPENDED");
+        }
         item = menuItemRepository.save(item);
 
         auditLogService.recordForCurrentUser(AuditActions.MENU_CHANGE, storeId, "MENU_ITEM", item.getId(),
