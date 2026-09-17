@@ -711,7 +711,13 @@ export const MenuManagementPage: React.FC = () => {
                 </div>
               </FormField>
               <FormField label="写真（任意）">
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoFileChange} disabled={uploadingPhoto} />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  onChange={handlePhotoFileChange}
+                  disabled={uploadingPhoto}
+                />
                 {uploadingPhoto && <p style={{ color: '#666', fontSize: '13px' }}>アップロード中...</p>}
                 {itemForm.photoUrl && !uploadingPhoto && (
                   <div style={{ marginTop: '8px', display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
