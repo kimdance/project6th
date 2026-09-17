@@ -105,6 +105,9 @@ export const MenuManagementPage: React.FC = () => {
   const [messages, setMessages] = useState<string[]>([]);
   const [errorFields, setErrorFields] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
+  // 販売状況の切替（一覧・編集画面どちらのボタンからでも起こりうる）のエラーは、対象のメニュー
+  // 項目自身のカード／欄に出したいため、ページ共通の messages とは別に商品IDごとに持つ。
+  const [itemErrors, setItemErrors] = useState<Record<number, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -388,13 +391,21 @@ export const MenuManagementPage: React.FC = () => {
       return;
     }
     resetMessages();
+    setItemErrors((prev) => {
+      if (!(item.id in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
     const result = await updateMenuItemSalesStatus(selectedStoreId, item.id, nextStatus);
     if (result.ok) {
       setItems((prev) => prev.map((i) => (i.id === item.id ? result.item : i)));
       setEditingItem((prev) => (prev && prev.id === item.id ? result.item : prev));
       setSuccessMessage(`「${result.item.name}」を${SALES_STATUS_LABELS[nextStatus]}にしました。`);
     } else {
-      setMessages(result.errors.map((err) => err.message));
+      setItemErrors((prev) => ({ ...prev, [item.id]: result.errors.map((err) => err.message) }));
     }
   };
 
@@ -554,6 +565,7 @@ export const MenuManagementPage: React.FC = () => {
               <ItemList
                 items={filteredItems}
                 categoryById={categoryById}
+                itemErrors={itemErrors}
                 editable={editable}
                 toggleable={toggleable}
                 onEdit={openEditItem}
@@ -674,6 +686,7 @@ export const MenuManagementPage: React.FC = () => {
                     <span style={{ fontSize: '13px', color: '#666' }}>販売状況</span>
                     <SalesStatusBadge status={editingItem.salesStatus} />
                   </div>
+                  {itemErrors[editingItem.id] && <TopMessage messages={itemErrors[editingItem.id]} isError />}
                   <SalesStatusButtons item={editingItem} onToggle={toggleStatus} />
                 </div>
               )}
@@ -870,13 +883,14 @@ export const MenuManagementPage: React.FC = () => {
 const ItemList: React.FC<{
   items: MenuItem[];
   categoryById: Map<number, MenuCategory>;
+  itemErrors: Record<number, string[]>;
   editable: boolean;
   toggleable: boolean;
   onEdit: (item: MenuItem) => void;
   onToggle: (item: MenuItem, nextStatus: SalesStatus) => void;
   onCreate: () => void;
   canCreate: boolean;
-}> = ({ items, categoryById, editable, toggleable, onEdit, onToggle, onCreate, canCreate }) => (
+}> = ({ items, categoryById, itemErrors, editable, toggleable, onEdit, onToggle, onCreate, canCreate }) => (
   <div style={{ marginBottom: '15px' }}>
     {items.length === 0 && <p style={{ color: '#666' }}>該当するメニューがありません。</p>}
     {items.map((item) => {
@@ -893,6 +907,7 @@ const ItemList: React.FC<{
           opacity: item.active ? 1 : 0.6,
         }}
       >
+        {itemErrors[item.id] && <TopMessage messages={itemErrors[item.id]} isError />}
         <div
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}
           onClick={editable ? () => onEdit(item) : undefined}
