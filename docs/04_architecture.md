@@ -270,6 +270,14 @@
     販売状況自体の変更は従来どおり別エンドポイント（`PATCH .../sales-status`）で行う必要があり、
     メニュー編集画面にも同エンドポイントを呼ぶ切替ボタンを追加済み（2026-09-17の別追補）。
     実装は `MenuService#validateItem`（第3引数 `currentSalesStatus` を追加）。
+  - 2026-09-17 追補（無効なメニュー項目は販売状況を「提供停止」以外へ変更不可に。FR-D03）：
+    上記の「無効化には事前に提供停止が必要」の逆方向として、既に`active: false`（無効）の
+    メニュー項目に対して`PATCH .../menu-items/{itemId}/sales-status`で`SUSPENDED`以外を
+    指定した場合も400エラーとする（`menu.error.sales-status.requires-active`「メニューを
+    無効にする場合、販売状況を「提供停止」にしてください。」）。これにより「無効なメニュー
+    項目は常に提供停止状態」という不変条件を、無効化する方向・販売状況を変える方向の両方から
+    担保する。再度販売したい場合は、先に`PUT .../menu-items/{itemId}`で有効化してから
+    販売状況を変更する必要がある。実装は `MenuService#updateSalesStatus`。
   - 2026-09-17 追補（メニュー写真をブラウザ内カメラ撮影にも対応。FR-D01）：ファイル選択に加え、
     「📷 写真を撮る」ボタンから `navigator.mediaDevices.getUserMedia` でカメラ映像をその場で
     プレビューし、「撮影する」で現在のフレームを`canvas`経由でJPEGに変換、既存の写真アップロード

@@ -160,6 +160,11 @@ public class MenuService {
         return new MenuItemPhotoResponse(photoUrl);
     }
 
+    /**
+     * 売り切れ・提供停止の切替（FR-D03）。無効（{@code active == false}）なメニュー項目は、
+     * {@link #validateItem} が課す「無効化する前に提供停止にしておく」制約の裏返しとして、
+     * 提供停止以外へ変更することを許さない（先に {@link #updateItem} で有効化してから変更する）。
+     */
     @Transactional
     public MenuItemResponse updateSalesStatus(Long storeId, Long itemId, String salesStatus) {
         accessGuard.requireStoreInTenant(storeId);
@@ -171,6 +176,9 @@ public class MenuService {
 
         if (salesStatus == null || !VALID_SALES_STATUSES.contains(salesStatus)) {
             throw new BusinessException(List.of(err("menu.error.sales-status.invalid", "salesStatus")));
+        }
+        if (!item.isActive() && !"SUSPENDED".equals(salesStatus)) {
+            throw new BusinessException(List.of(err("menu.error.sales-status.requires-active", "salesStatus")));
         }
         item.setSalesStatus(salesStatus);
         menuItemRepository.save(item);
