@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopMessage } from '../components/TopMessage';
 import { fetchMe, type Me } from '../api/session';
@@ -73,6 +73,8 @@ const ACTIVE_FILTER_LABELS: Record<ActiveFilter, string> = {
 const matchesActiveFilter = (filter: ActiveFilter, active: boolean) =>
   filter === 'ALL' || (filter === 'ACTIVE') === active;
 
+const cameraSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+
 /**
  * メニュー管理画面（FR-D01〜D03）。
  * 店舗が複数あれば先に店舗を選ばせ、選んだ店舗のカテゴリ・メニュー項目を管理する。
@@ -105,6 +107,9 @@ export const MenuManagementPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const [categoryActiveFilter, setCategoryActiveFilter] = useState<ActiveFilter>('ALL');
   const [itemActiveFilter, setItemActiveFilter] = useState<ActiveFilter>('ALL');
@@ -147,6 +152,21 @@ export const MenuManagementPage: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
+
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    // 画面を離れる際にカメラを掴んだままにしない（他アプリでの利用を妨げないため）。
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   const selectStoreData = async (storeId: number) => {
     setSelectedStoreId(storeId);
@@ -230,6 +250,7 @@ export const MenuManagementPage: React.FC = () => {
   // ---- メニュー項目 ----
 
   const openCreateItem = () => {
+    stopCamera();
     resetMessages();
     setEditingItemId(null);
     setEditingItem(null);
@@ -239,6 +260,7 @@ export const MenuManagementPage: React.FC = () => {
   };
 
   const openEditItem = (item: MenuItem) => {
+    stopCamera();
     resetMessages();
     setEditingItemId(item.id);
     setEditingItem(item);
@@ -288,10 +310,8 @@ export const MenuManagementPage: React.FC = () => {
     }
   };
 
-  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || selectedStoreId === null) {
+  const uploadPhotoFile = async (file: File) => {
+    if (selectedStoreId === null) {
       return;
     }
     resetMessages();
@@ -309,6 +329,54 @@ export const MenuManagementPage: React.FC = () => {
     } finally {
       setUploadingPhoto(false);
     }
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) {
+      return;
+    }
+    await uploadPhotoFile(file);
+  };
+
+  const startCamera = async () => {
+    resetMessages();
+    setCameraError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setCameraStream(stream);
+    } catch (error) {
+      console.error('カメラの起動に失敗:', error);
+      setCameraError('カメラを起動できませんでした。ブラウザのカメラ権限設定をご確認ください。');
+    }
+  };
+
+  const stopCamera = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+  };
+
+  const capturePhoto = async () => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0) {
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    stopCamera();
+    if (!blob) {
+      setMessages(['写真の撮影に失敗しました。']);
+      return;
+    }
+    await uploadPhotoFile(new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' }));
   };
 
   const clearPhoto = () => {
@@ -331,6 +399,7 @@ export const MenuManagementPage: React.FC = () => {
   };
 
   const backToList = () => {
+    stopCamera();
     resetMessages();
     setView('list');
   };
@@ -711,15 +780,47 @@ export const MenuManagementPage: React.FC = () => {
                 </div>
               </FormField>
               <FormField label="写真（任意）">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
-                  onChange={handlePhotoFileChange}
-                  disabled={uploadingPhoto}
-                />
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    capture="environment"
+                    onChange={handlePhotoFileChange}
+                    disabled={uploadingPhoto || cameraStream !== null}
+                  />
+                  {cameraSupported && cameraStream === null && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={uploadingPhoto}
+                      style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 0, padding: '6px 12px', fontSize: '13px' }}
+                    >
+                      📷 写真を撮る
+                    </button>
+                  )}
+                </div>
+                {cameraError && <p style={{ color: '#dc3545', fontSize: '13px' }}>{cameraError}</p>}
+                {cameraStream !== null && (
+                  <div style={{ marginTop: '8px' }}>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ width: '100%', maxWidth: '320px', borderRadius: '4px', backgroundColor: '#000' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', maxWidth: '320px' }}>
+                      <button type="button" onClick={capturePhoto} style={{ ...primaryButtonStyle, marginBottom: 0 }}>
+                        撮影する
+                      </button>
+                      <button type="button" onClick={stopCamera} style={secondaryButtonStyle}>
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {uploadingPhoto && <p style={{ color: '#666', fontSize: '13px' }}>アップロード中...</p>}
-                {itemForm.photoUrl && !uploadingPhoto && (
+                {itemForm.photoUrl && !uploadingPhoto && cameraStream === null && (
                   <div style={{ marginTop: '8px', display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
                     <img
                       src={toPhotoDisplayUrl(itemForm.photoUrl)}

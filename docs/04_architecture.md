@@ -270,6 +270,16 @@
     販売状況自体の変更は従来どおり別エンドポイント（`PATCH .../sales-status`）で行う必要があり、
     メニュー編集画面にも同エンドポイントを呼ぶ切替ボタンを追加済み（2026-09-17の別追補）。
     実装は `MenuService#validateItem`（第3引数 `currentSalesStatus` を追加）。
+  - 2026-09-17 追補（メニュー写真をブラウザ内カメラ撮影にも対応。FR-D01）：ファイル選択に加え、
+    「📷 写真を撮る」ボタンから `navigator.mediaDevices.getUserMedia` でカメラ映像をその場で
+    プレビューし、「撮影する」で現在のフレームを`canvas`経由でJPEGに変換、既存の写真アップロード
+    エンドポイント（`POST .../menu-items/photo`）へそのままアップロードするようにした。新規の
+    エンドポイント・スキーマ変更は無い（既存アップロードの入力元が増えただけ）。`getUserMedia`は
+    `https`または`localhost`系オリジンでのみ動作するブラウザの制約があるが、本アプリの開発・
+    本番とも`<company_code>.localhost`／実運用ドメインのいずれも該当するため問題ない。カメラの
+    利用権限が得られない場合はエラーメッセージを表示し、通常のファイル選択にフォールバックする。
+    画面遷移時（一覧に戻る・別項目を開く等）は掴んだカメラストリームを必ず停止する。実装は
+    `MenuManagementPage.tsx` の `startCamera`／`capturePhoto`／`stopCamera`。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
