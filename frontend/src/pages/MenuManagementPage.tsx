@@ -277,6 +277,17 @@ export const MenuManagementPage: React.FC = () => {
   const openEditItem = (item: MenuItem) => {
     stopCamera();
     resetMessages();
+    // 一覧側で起きた過去の失敗が、何も操作していない詳細画面にそのまま出てしまわないよう、
+    // 詳細画面を開くたびにこの項目のエラー表示はリセットする（この画面で改めて操作して
+    // 失敗した場合にのみ、toggleStatus 側で再度セットされる）。
+    setItemErrors((prev) => {
+      if (!(item.id in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
     setEditingItemId(item.id);
     setEditingItem(item);
     setItemForm({
