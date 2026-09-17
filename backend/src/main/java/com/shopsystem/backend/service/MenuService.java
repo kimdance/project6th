@@ -3,6 +3,7 @@ package com.shopsystem.backend.service;
 import com.shopsystem.backend.dto.ErrorItem;
 import com.shopsystem.backend.dto.MenuCategoryRequest;
 import com.shopsystem.backend.dto.MenuCategoryResponse;
+import com.shopsystem.backend.dto.MenuItemPhotoResponse;
 import com.shopsystem.backend.dto.MenuItemRequest;
 import com.shopsystem.backend.dto.MenuItemResponse;
 import com.shopsystem.backend.entity.MenuCategory;
@@ -18,6 +19,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +45,7 @@ public class MenuService {
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
     private final AuditLogService auditLogService;
+    private final FileStorageService fileStorageService;
 
     // ---- カテゴリ（FR-D02） ----
 
@@ -142,6 +145,19 @@ public class MenuService {
                 beforeSummary, summarizeItem(item));
 
         return toItemResponse(item);
+    }
+
+    /**
+     * メニュー写真のアップロード（FR-D01）。フルの編集と同じ権限（経営管理者・店長のみ）で、
+     * 保存自体は {@link FileStorageService} に委ねる。返す {@code photoUrl} を
+     * メニュー項目の登録・更新リクエストの {@code photoUrl} にそのまま渡す想定。
+     */
+    public MenuItemPhotoResponse uploadItemPhoto(Long storeId, MultipartFile file) {
+        accessGuard.requireStoreInTenant(storeId);
+        accessGuard.requireCanEdit(storeId);
+
+        String photoUrl = fileStorageService.storeMenuItemPhoto(TenantContext.get().companyCode(), storeId, file);
+        return new MenuItemPhotoResponse(photoUrl);
     }
 
     @Transactional

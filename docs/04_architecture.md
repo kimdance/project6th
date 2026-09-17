@@ -239,6 +239,18 @@
     未実装のまま残した（フェーズ1の`S`区分のため後回し）。ホーム画面に `app_feature`（`feature_key
     = 'menu'`）を追加し、経営管理者・店長・ホール・キッチンに表示（バイトは対象外）。監査ログは
     `MENU_CHANGE` で記録する。実装は `MenuCategory`／`MenuItem`／`MenuService`／`MenuController`。
+  - 2026-09-17 追補（メニュー写真アップロードの実装。FR-D01）：メニュー管理画面の「写真」を、URL
+    文字列を手入力する方式から、ファイルダイアログで画像を選び即アップロードする方式に変更した。
+    新規エンドポイントは `POST /api/v1/stores/{storeId}/menu-items/photo`（`multipart/form-data`の
+    `file`。返り値 `{ photoUrl }` を登録・更新リクエストの `photoUrl` にそのまま渡す）。権限は
+    フルの編集と同じ経営管理者・店長のみ（`StoreAccessGuard#requireCanEdit`）。保存先は §6.5の
+    レシートPDF保存と同じ方針で、本番のオブジェクトストレージは本番ホスティング確定後に選定し、
+    フェーズ1開発中はローカルディスク（`app.upload.dir`。既定 `uploads`）へ保存する。保存パスは
+    `uploads/menu-photos/{companyCode}/{storeId}/{UUID}.{拡張子}`、公開URLは `/uploads/**` として
+    `WebConfig` で静的配信する（お客様の注文画面等でも表示するため認証を課さない。ファイル名は
+    推測困難なUUID）。許可する形式はJPEG／PNG／WEBPのみ、上限5MB（`spring.servlet.multipart.
+    max-file-size`。超過時は`GlobalExceptionHandler`が400を返す）。実装は
+    `FileStorageService`／`MenuService#uploadItemPhoto`／`MenuController#uploadItemPhoto`。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1184,7 +1196,7 @@ CREATE TABLE outbound_message (
 | ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
-| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
+| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
 | 卓・注文 | `POST /api/v1/stores/{storeId}/table-sessions`、`POST .../{id}/orders`、`PATCH .../order-lines/{id}` | FR-E01〜E07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
 | 会計 | `POST /api/v1/table-sessions/{id}/checks`、`POST .../checks/{id}/payments`、`POST .../checks/{id}/finalize`、`POST .../checks/{id}/refunds` | FR-G01〜G12 |

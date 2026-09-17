@@ -1,5 +1,8 @@
 HELP.md
 target/
+# ローカル開発時のアップロード保存先（app.upload.dir）。フェーズ1の暫定ストレージのため
+# リポジトリには含めない（04_architecture.md §6.5・2026-09-17追補）。
+/uploads/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

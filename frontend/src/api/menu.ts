@@ -1,4 +1,5 @@
-import { authedFetch, extractErrors, type ErrorItem } from './http';
+import { authedFetch, authedUpload, extractErrors, type ErrorItem } from './http';
+import { getTenantApiBaseUrl } from '../config';
 
 export type TaxCategory = 'STANDARD_10' | 'REDUCED_8';
 export type PrepType = 'COOK' | 'NO_COOK';
@@ -86,6 +87,30 @@ export async function updateMenuCategory(
     return { ok: true, category: (await res.json()) as MenuCategory };
   }
   return { ok: false, errors: await extractErrors(res) };
+}
+
+/**
+ * メニュー写真をアップロードし、保存先の相対パス（{@code /uploads/...}）を返す（FR-D01）。
+ * このパスをそのまま {@link MenuItemRequest.photoUrl} に渡す。表示（img の src）には
+ * {@link toPhotoDisplayUrl} でテナントのバックエンドのアドレスを補って使う。
+ */
+export async function uploadMenuItemPhoto(
+  storeId: number,
+  file: File
+): Promise<{ ok: true; photoUrl: string } | { ok: false; errors: ErrorItem[] }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await authedUpload(`/api/v1/stores/${storeId}/menu-items/photo`, formData);
+  if (res.ok) {
+    const body = (await res.json()) as { photoUrl: string };
+    return { ok: true, photoUrl: body.photoUrl };
+  }
+  return { ok: false, errors: await extractErrors(res) };
+}
+
+/** 保存された photoUrl（相対パス）を、そのまま img の src に使える絶対URLへ変換する。 */
+export function toPhotoDisplayUrl(photoUrl: string): string {
+  return photoUrl.startsWith('/') ? `${getTenantApiBaseUrl()}${photoUrl}` : photoUrl;
 }
 
 export async function fetchMenuItems(storeId: number): Promise<MenuItem[]> {

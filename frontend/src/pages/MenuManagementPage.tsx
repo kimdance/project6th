@@ -11,6 +11,8 @@ import {
   createMenuItem,
   updateMenuItem,
   updateMenuItemSalesStatus,
+  uploadMenuItemPhoto,
+  toPhotoDisplayUrl,
   type MenuCategory,
   type MenuCategoryRequest,
   type MenuItem,
@@ -91,6 +93,7 @@ export const MenuManagementPage: React.FC = () => {
   const [errorFields, setErrorFields] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,6 +268,33 @@ export const MenuManagementPage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || selectedStoreId === null) {
+      return;
+    }
+    resetMessages();
+    setUploadingPhoto(true);
+    try {
+      const result = await uploadMenuItemPhoto(selectedStoreId, file);
+      if (result.ok) {
+        setItemForm((prev) => ({ ...prev, photoUrl: result.photoUrl }));
+      } else {
+        setMessages(result.errors.map((err) => err.message));
+      }
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['写真のアップロードに失敗しました。']);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const clearPhoto = () => {
+    setItemForm((prev) => ({ ...prev, photoUrl: '' }));
   };
 
   const toggleStatus = async (item: MenuItem, nextStatus: SalesStatus) => {
@@ -551,23 +581,23 @@ export const MenuManagementPage: React.FC = () => {
                   />
                 </div>
               </FormField>
-              <FormField label="写真URL（任意）">
-                <input
-                  type="text"
-                  placeholder="https://..."
-                  value={itemForm.photoUrl}
-                  onChange={(e) => setItemForm((prev) => ({ ...prev, photoUrl: e.target.value }))}
-                  style={getInputStyle('photoUrl')}
-                />
-                {itemForm.photoUrl && (
-                  <img
-                    src={itemForm.photoUrl}
-                    alt=""
-                    style={{ marginTop: '8px', maxWidth: '120px', maxHeight: '120px', borderRadius: '4px' }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
+              <FormField label="写真（任意）">
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoFileChange} disabled={uploadingPhoto} />
+                {uploadingPhoto && <p style={{ color: '#666', fontSize: '13px' }}>アップロード中...</p>}
+                {itemForm.photoUrl && !uploadingPhoto && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
+                    <img
+                      src={toPhotoDisplayUrl(itemForm.photoUrl)}
+                      alt=""
+                      style={{ maxWidth: '120px', maxHeight: '120px', borderRadius: '4px' }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <button type="button" onClick={clearPhoto} style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 0, padding: '6px 12px', fontSize: '13px' }}>
+                      写真を削除
+                    </button>
+                  </div>
                 )}
               </FormField>
               <FormField label="並び順（小さいほど先に表示）">

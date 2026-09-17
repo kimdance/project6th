@@ -28,6 +28,23 @@ export function authedFetch(path: string, init: RequestInit = {}): Promise<Respo
   });
 }
 
+/**
+ * ファイルアップロード用の fetch（FR-D01のメニュー写真等）。`Content-Type` を明示しないことで、
+ * ブラウザが `multipart/form-data; boundary=...` を自動付与する（`authedFetch` は JSON 前提で
+ * 固定してしまうため使えない）。
+ */
+export function authedUpload(path: string, formData: FormData): Promise<Response> {
+  const token = localStorage.getItem('accessToken');
+  return fetch(`${getTenantApiBaseUrl()}${path}`, {
+    method: 'POST',
+    body: formData,
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${token ?? ''}`,
+    },
+  });
+}
+
 /** エラーレスポンス（{ errors: ErrorItem[] }）から表示用のメッセージ一覧を取り出す。 */
 export async function extractErrors(res: Response): Promise<ErrorItem[]> {
   const body: ApiErrorResponse = await res.json().catch(() => ({}));

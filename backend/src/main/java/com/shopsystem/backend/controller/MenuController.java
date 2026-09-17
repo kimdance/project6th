@@ -2,6 +2,7 @@ package com.shopsystem.backend.controller;
 
 import com.shopsystem.backend.dto.MenuCategoryRequest;
 import com.shopsystem.backend.dto.MenuCategoryResponse;
+import com.shopsystem.backend.dto.MenuItemPhotoResponse;
 import com.shopsystem.backend.dto.MenuItemRequest;
 import com.shopsystem.backend.dto.MenuItemResponse;
 import com.shopsystem.backend.dto.MenuItemStatusRequest;
@@ -16,8 +17,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -61,6 +64,12 @@ public class MenuController {
     public MenuItemResponse updateItem(
             @PathVariable Long storeId, @PathVariable Long itemId, @RequestBody MenuItemRequest body) {
         return menuService.updateItem(storeId, itemId, body);
+    }
+
+    /** メニュー写真のアップロード（FR-D01。ファイルダイアログで選択した画像をここへ送り、返る photoUrl を登録・更新リクエストへ渡す）。 */
+    @PostMapping("/menu-items/photo")
+    public MenuItemPhotoResponse uploadItemPhoto(@PathVariable Long storeId, @RequestParam("file") MultipartFile file) {
+        return menuService.uploadItemPhoto(storeId, file);
     }
 
     @PatchMapping("/menu-items/{itemId}/sales-status")
