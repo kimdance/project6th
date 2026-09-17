@@ -368,12 +368,22 @@ export const MenuManagementPage: React.FC = () => {
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const filteredCategories = categories.filter((c) => matchesActiveFilter(categoryActiveFilter, c.active));
-  const filteredItems = items.filter(
-    (i) =>
-      matchesActiveFilter(itemActiveFilter, i.active) &&
-      (itemCategoryFilter === 'ALL' || i.categoryId === itemCategoryFilter) &&
-      (itemSalesStatusFilter === 'ALL' || i.salesStatus === itemSalesStatusFilter)
-  );
+  const filteredItems = items
+    .filter(
+      (i) =>
+        matchesActiveFilter(itemActiveFilter, i.active) &&
+        (itemCategoryFilter === 'ALL' || i.categoryId === itemCategoryFilter) &&
+        (itemSalesStatusFilter === 'ALL' || i.salesStatus === itemSalesStatusFilter)
+    )
+    // カテゴリの並び順を優先し、同じカテゴリ内はメニュー項目自身の並び順に従う。
+    .sort((a, b) => {
+      const categoryOrderDiff =
+        (categoryById.get(a.categoryId)?.displayOrder ?? 0) - (categoryById.get(b.categoryId)?.displayOrder ?? 0);
+      if (categoryOrderDiff !== 0) {
+        return categoryOrderDiff;
+      }
+      return a.displayOrder - b.displayOrder || a.id - b.id;
+    });
 
   return (
     <div style={{ maxWidth: '560px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
@@ -782,12 +792,15 @@ const ItemList: React.FC<{
           role={editable ? 'button' : undefined}
         >
           <div style={{ cursor: editable ? 'pointer' : 'default' }}>
-            <div style={{ fontWeight: 600 }}>
-              {item.name}
-              {!item.active && '　[無効]'}
+            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CategoryBadge name={item.categoryName} />
+              <span>
+                {item.name}
+                {!item.active && '　[無効]'}
+              </span>
             </div>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              {item.categoryName} ・ {item.priceJpy.toLocaleString()}円 ・ {TAX_CATEGORY_LABELS[item.taxCategory]}
+            <div style={{ fontSize: '13px', color: '#666', marginTop: '2px' }}>
+              {item.priceJpy.toLocaleString()}円 ・ {TAX_CATEGORY_LABELS[item.taxCategory]}
             </div>
             {categoryInactive && (
               <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '2px' }}>
@@ -811,6 +824,23 @@ const ItemList: React.FC<{
       </button>
     )}
   </div>
+);
+
+const CategoryBadge: React.FC<{ name: string }> = ({ name }) => (
+  <span
+    style={{
+      flexShrink: 0,
+      padding: '1px 8px',
+      borderRadius: '10px',
+      fontSize: '11px',
+      fontWeight: 400,
+      color: '#555',
+      backgroundColor: '#eee',
+      border: '1px solid #ddd',
+    }}
+  >
+    {name}
+  </span>
 );
 
 const SalesStatusBadge: React.FC<{ status: SalesStatus }> = ({ status }) => (
