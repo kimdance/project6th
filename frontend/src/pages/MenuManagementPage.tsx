@@ -109,6 +109,7 @@ export const MenuManagementPage: React.FC = () => {
   const [categoryActiveFilter, setCategoryActiveFilter] = useState<ActiveFilter>('ALL');
   const [itemActiveFilter, setItemActiveFilter] = useState<ActiveFilter>('ALL');
   const [itemCategoryFilter, setItemCategoryFilter] = useState<number | 'ALL'>('ALL');
+  const [itemSalesStatusFilter, setItemSalesStatusFilter] = useState<SalesStatus | 'ALL'>('ALL');
 
   useEffect(() => {
     let cancelled = false;
@@ -370,7 +371,8 @@ export const MenuManagementPage: React.FC = () => {
   const filteredItems = items.filter(
     (i) =>
       matchesActiveFilter(itemActiveFilter, i.active) &&
-      (itemCategoryFilter === 'ALL' || i.categoryId === itemCategoryFilter)
+      (itemCategoryFilter === 'ALL' || i.categoryId === itemCategoryFilter) &&
+      (itemSalesStatusFilter === 'ALL' || i.salesStatus === itemSalesStatusFilter)
   );
 
   return (
@@ -449,6 +451,22 @@ export const MenuManagementPage: React.FC = () => {
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ fontSize: '13px' }}>
+                  販売状況:{' '}
+                  <select
+                    value={itemSalesStatusFilter}
+                    onChange={(e) =>
+                      setItemSalesStatusFilter(e.target.value as SalesStatus | 'ALL')
+                    }
+                  >
+                    <option value="ALL">すべて</option>
+                    {(Object.keys(SALES_STATUS_LABELS) as SalesStatus[]).map((s) => (
+                      <option key={s} value={s}>
+                        {SALES_STATUS_LABELS[s]}
                       </option>
                     ))}
                   </select>
