@@ -636,6 +636,11 @@
     （`findAllByTableSession_IdOrderByRegisteredAtAscIdAsc`。`OrderService#getSessionDetail`・
     `CheckoutService#createCheck` の両方で使用）。実機で複数明細を同時送信したうえで
     状態を繰り返し変更し、並び順が変わらなくなったことを確認した。
+  - 2026-09-18 追補（注文管理：現在の注文に「注文状態で絞り込み」を追加。FR-E07）：「現在の注文」
+    一覧に、卓一覧の「卓種類で絞り込み」「有効/無効で絞り込み」と同様の検索条件として
+    「注文状態で絞り込み」（未提供／調理中／提供済み／取消／却下）を追加した。明細の件数が
+    多い卓で、特定の状態の品目だけを見たい場合に使う。`FloorPage.tsx` の表示のみの変更
+    （バックエンドは変更なし）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

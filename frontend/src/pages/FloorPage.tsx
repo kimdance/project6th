@@ -96,6 +96,7 @@ function formatTime(iso: string): string {
 type View = 'select-store' | 'board' | 'open' | 'order' | 'checkout';
 type SeatTypeFilter = 'ALL' | SeatType;
 type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+type ServeStatusFilter = 'ALL' | keyof typeof SERVE_STATUS_LABELS;
 
 /**
  * 注文管理（卓・注文）画面（FR-E01・E02・E03・E03b・E03c・E04・E07・FR-C07）。
@@ -126,6 +127,7 @@ export const FloorPage: React.FC = () => {
   const [detail, setDetail] = useState<TableSessionDetail | null>(null);
   const [cart, setCart] = useState<{ menuItemId: number; quantity: number; note: string }[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<number | 'ALL'>('ALL');
+  const [serveStatusFilter, setServeStatusFilter] = useState<ServeStatusFilter>('ALL');
 
   const [cancellingLine, setCancellingLine] = useState<OrderLine | null>(null);
   const [cancelReason, setCancelReason] = useState<CancelReason>('ORDER_MISTAKE');
@@ -268,6 +270,7 @@ export const FloorPage: React.FC = () => {
     setCategories(cats);
     setMenuItems(items);
     setCategoryFilter('ALL');
+    setServeStatusFilter('ALL');
     setCart([]);
     setView('order');
   };
@@ -539,6 +542,11 @@ export const FloorPage: React.FC = () => {
   const hasBillableLines =
     detail !== null && detail.lines.some((l) => l.serveStatus !== 'CANCELLED' && l.serveStatus !== 'REJECTED');
 
+  const visibleLines =
+    detail === null
+      ? []
+      : detail.lines.filter((l) => serveStatusFilter === 'ALL' || l.serveStatus === serveStatusFilter);
+
   const visibleMenuItems = menuItems.filter(
     (item) =>
       item.salesStatus === 'ON_SALE' && item.active && (categoryFilter === 'ALL' || item.categoryId === categoryFilter)
@@ -753,7 +761,27 @@ export const FloorPage: React.FC = () => {
             )}
           </div>
           {detail.lines.length === 0 && <p style={{ color: '#666' }}>まだ注文がありません。</p>}
-          {detail.lines.map((line) => (
+          {detail.lines.length > 0 && (
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>注文状態で絞り込み:</label>
+              <select
+                value={serveStatusFilter}
+                onChange={(e) => setServeStatusFilter(e.target.value as ServeStatusFilter)}
+                style={inputStyle}
+              >
+                <option value="ALL">すべて</option>
+                {(Object.keys(SERVE_STATUS_LABELS) as (keyof typeof SERVE_STATUS_LABELS)[]).map((status) => (
+                  <option key={status} value={status}>
+                    {SERVE_STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {detail.lines.length > 0 && visibleLines.length === 0 && (
+            <p style={{ color: '#666' }}>条件に一致する注文明細がありません。</p>
+          )}
+          {visibleLines.map((line) => (
             <div key={line.id} style={lineCardStyle(line.serveStatus)}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <strong>
