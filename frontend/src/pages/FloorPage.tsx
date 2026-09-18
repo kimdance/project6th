@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TopMessage } from '../components/TopMessage';
 import { fetchMe, type Me } from '../api/session';
 import { fetchStores, type Store } from '../api/stores';
-import { fetchTables, type DiningTable } from '../api/tables';
+import { fetchTables, type DiningTable, type SeatType } from '../api/tables';
 import { fetchReservations, type Reservation } from '../api/reservations';
 import { fetchMenuCategories, fetchMenuItems, type MenuCategory, type MenuItem } from '../api/menu';
 import {
@@ -25,6 +25,11 @@ const TABLE_STATUS_LABELS: Record<string, string> = {
   EMPTY: '空席',
   OCCUPIED: '利用中',
   BILLING: '会計中',
+};
+
+const SEAT_TYPE_LABELS: Record<SeatType, string> = {
+  COUNTER: 'カウンター',
+  TABLE: 'テーブル',
 };
 
 const SERVE_STATUS_LABELS: Record<string, string> = {
@@ -56,6 +61,8 @@ function formatTime(iso: string): string {
 }
 
 type View = 'select-store' | 'board' | 'open' | 'order';
+type SeatTypeFilter = 'ALL' | SeatType;
+type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 /**
  * 注文管理（卓・注文）画面（FR-E01・E02・E03・E03b・E03c・E04・E07・FR-C07）。
@@ -72,6 +79,8 @@ export const FloorPage: React.FC = () => {
   const [view, setView] = useState<View>('board');
 
   const [tables, setTables] = useState<DiningTable[]>([]);
+  const [seatTypeFilter, setSeatTypeFilter] = useState<SeatTypeFilter>('ALL');
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('ALL');
   const [sessions, setSessions] = useState<TableSession[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -136,8 +145,23 @@ export const FloorPage: React.FC = () => {
   const selectStore = async (id: number) => {
     setStoreId(id);
     await refreshBoard(id);
+    setSeatTypeFilter('ALL');
+    setActiveFilter('ALL');
     setView('board');
   };
+
+  const visibleTables = tables.filter((table) => {
+    if (seatTypeFilter !== 'ALL' && table.seatType !== seatTypeFilter) {
+      return false;
+    }
+    if (activeFilter === 'ACTIVE' && !table.active) {
+      return false;
+    }
+    if (activeFilter === 'INACTIVE' && table.active) {
+      return false;
+    }
+    return true;
+  });
 
   const refreshBoard = async (id: number) => {
     const [tableList, sessionList] = await Promise.all([fetchTables(id), fetchActiveTableSessions(id)]);
@@ -356,8 +380,39 @@ export const FloorPage: React.FC = () => {
               店舗: <strong>{stores.find((s) => s.id === storeId)?.name}</strong>
             </p>
           )}
+          {tables.length > 0 && (
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>席種類で絞り込み:</label>
+                <select
+                  value={seatTypeFilter}
+                  onChange={(e) => setSeatTypeFilter(e.target.value as SeatTypeFilter)}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+                >
+                  <option value="ALL">すべて</option>
+                  <option value="TABLE">{SEAT_TYPE_LABELS.TABLE}</option>
+                  <option value="COUNTER">{SEAT_TYPE_LABELS.COUNTER}</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>有効/無効で絞り込み:</label>
+                <select
+                  value={activeFilter}
+                  onChange={(e) => setActiveFilter(e.target.value as ActiveFilter)}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+                >
+                  <option value="ALL">すべて</option>
+                  <option value="ACTIVE">有効のみ</option>
+                  <option value="INACTIVE">無効のみ</option>
+                </select>
+              </div>
+            </div>
+          )}
           {tables.length === 0 && <p style={{ color: '#666' }}>卓がまだ登録されていません。</p>}
-          {tables.map((table) => {
+          {tables.length > 0 && visibleTables.length === 0 && (
+            <p style={{ color: '#666' }}>条件に一致する卓がありません。</p>
+          )}
+          {visibleTables.map((table) => {
             const session = sessions.find((s) => s.diningTableId === table.id);
             // 無効な卓は新規オープン不可（既にオープン済みのセッションがあれば、その注文の管理は続けられる）。
             const canOpen = table.status === 'EMPTY' && table.active;
@@ -380,6 +435,7 @@ export const FloorPage: React.FC = () => {
                   {!table.active && '　[無効]'}
                 </div>
                 <div style={{ fontSize: '13px', color: '#666' }}>
+                  {SEAT_TYPE_LABELS[table.seatType]} ・ 席数 {table.seatCount} ・{' '}
                   {TABLE_STATUS_LABELS[table.status] ?? table.status}
                   {session ? ` ・ ${session.partySize}名 ・ ${formatTime(session.openedAt)}〜` : ''}
                 </div>
