@@ -744,7 +744,7 @@ export const FloorPage: React.FC = () => {
             {hasBillableLines && (
               <button
                 type="button"
-                onClick={openCheckout}
+                onClick={() => openCheckout()}
                 disabled={saving}
                 style={{ ...qtyButtonStyle, padding: '8px 16px' }}
               >
