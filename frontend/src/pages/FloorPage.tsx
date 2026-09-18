@@ -835,6 +835,51 @@ export const FloorPage: React.FC = () => {
           )}
 
           <h3 style={{ marginTop: '24px' }}>追加注文</h3>
+          {cart.length > 0 && (
+            <div style={{ marginBottom: '15px' }}>
+              {cart.map((c) => {
+                const item = menuItems.find((m) => m.id === c.menuItemId);
+                if (!item) return null;
+                return (
+                  <div
+                    key={c.menuItemId}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      border: '1px solid #007bff',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      marginBottom: '8px',
+                      backgroundColor: '#eef6ff',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{item.name}</div>
+                      <div style={{ fontSize: '13px', color: '#666' }}>{item.priceJpy}円</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => changeCartQuantity(item.id, c.quantity - 1)}
+                        style={qtyButtonStyle}
+                      >
+                        −
+                      </button>
+                      <span>{c.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => changeCartQuantity(item.id, c.quantity + 1)}
+                        style={qtyButtonStyle}
+                      >
+                        ＋
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ marginBottom: '10px' }}>
             <select
               value={categoryFilter}
