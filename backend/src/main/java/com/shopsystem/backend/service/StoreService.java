@@ -140,6 +140,7 @@ public class StoreService {
         setting.setCancelChargeDefaultCustomer(req.isCancelChargeDefaultCustomer());
         setting.setCancelChargeDefaultStore(req.isCancelChargeDefaultStore());
         setting.setRequireManagerApprovalForServeCancel(req.isRequireManagerApprovalForServeCancel());
+        setting.setRequireManagerApprovalForVoidRefund(req.isRequireManagerApprovalForVoidRefund());
         storeSettingRepository.save(setting);
 
         auditLogService.recordForCurrentUser(AuditActions.STORE_SETTING_CHANGE, storeId, "STORE", storeId,
@@ -160,7 +161,8 @@ public class StoreService {
                 + ", webReservationMode=" + setting.getWebReservationMode()
                 + ", cancelChargeDefaultCustomer=" + setting.isCancelChargeDefaultCustomer()
                 + ", cancelChargeDefaultStore=" + setting.isCancelChargeDefaultStore()
-                + ", requireManagerApprovalForServeCancel=" + setting.isRequireManagerApprovalForServeCancel();
+                + ", requireManagerApprovalForServeCancel=" + setting.isRequireManagerApprovalForServeCancel()
+                + ", requireManagerApprovalForVoidRefund=" + setting.isRequireManagerApprovalForVoidRefund();
     }
 
     private StoreResponse toStoreResponse(Store store) {
@@ -175,7 +177,8 @@ public class StoreService {
                 store.getBusinessHours(), store.getSeatCount(),
                 setting.getTaxRounding(), setting.isPriceIncludesTax(), setting.getInvoiceRegNo(),
                 setting.getWebReservationMode(), setting.isCancelChargeDefaultCustomer(),
-                setting.isCancelChargeDefaultStore(), setting.isRequireManagerApprovalForServeCancel());
+                setting.isCancelChargeDefaultStore(), setting.isRequireManagerApprovalForServeCancel(),
+                setting.isRequireManagerApprovalForVoidRefund());
     }
 
     private ErrorItem err(String code, String field) {

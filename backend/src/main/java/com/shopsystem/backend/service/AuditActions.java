@@ -20,6 +20,10 @@ public final class AuditActions {
     public static final String RESERVATION_CANCEL = "RESERVATION_CANCEL";
     public static final String MENU_CHANGE = "MENU_CHANGE";
     public static final String ORDER_LINE_CANCEL_AFTER_SERVE = "ORDER_LINE_CANCEL_AFTER_SERVE";
+    public static final String CHECK_FINALIZE = "CHECK_FINALIZE";
+    public static final String CHECK_VOID = "CHECK_VOID";
+    public static final String CHECK_REFUND = "CHECK_REFUND";
+    public static final String CHECK_DISCOUNT = "CHECK_DISCOUNT";
 
     private AuditActions() {
     }

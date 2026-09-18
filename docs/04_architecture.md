@@ -507,6 +507,63 @@
     フィールド名（`seatType`）は変更していない）。あわせてバックエンドのバリデーション
     エラーメッセージ（`table.error.seat-type.invalid`）も「卓種類の指定が不正です。」に
     統一した。表示文言のみの変更。
+  - 2026-09-18 追補（会計・レジの実装。FR-G01〜G05・G06・G07・G07b・G10・G11。FR-C07に続き
+    卓のクローズを実装）：標準業務フロー（予約→来店・着席→注文→**会計**→締め）のうち、会計を
+    実装した。`guest_check`／`guest_check_line`／`guest_check_discount`／`guest_check_tax_line`／
+    `payment`／`refund` は `V1__init_schema.sql` の時点で作成済みだったが、アプリ層が未実装だった
+    ため実装した（`V17__checkout.sql` は店舗設定への列追加のみ）。
+    - **決済連携の方針（今回の実装範囲の確定）**：`02_requirements.md` §11.1のとおり決済代行
+      サービスの契約自体が経営判断待ちで、PayPay加盟店API・クレジットカード決済代行SDKとの
+      実接続はまだ行えない。そのため現金・PayPay・クレジットカード・楽天ペイの**全決済手段を
+      手入力方式**（スタッフが金額を確認して記録。`payment.is_manual_entry = true`、即時
+      `SUCCESS`）で実装した。§7.1で設計していた `PaymentGateway` プラグイン方式（Webhook・
+      `external_txn_id` での冪等性等）は、契約が決まり実際の決済代行と接続する段階で追加する
+      （それまでは `PayPayPaymentGateway`／`CreditCardPaymentGateway` は導入せず、`payment`
+      テーブルへの直接記録のみで運用）。
+    - **会計の作成（FR-G01・G11）**：`POST /api/v1/stores/{storeId}/table-sessions/{sessionId}/checks`
+      （`orderLineIds` 省略時はセッション内の未割当・未取消明細をすべて対象。指定時は別会計
+      〈FR-G11〉）。初回の会計作成で `table_session` を `BILLING` へ、`dining_table.status` を
+      `BILLING` へ遷移させる（03_domain_model.md §4.2）。
+    - **税額計算（FR-G01・G09。簡易方式）**：メニュー価格は税込（`price_includes_tax=true`）
+      前提のため、税区分（`STANDARD_10`＝10%／`REDUCED_8`＝8%）ごとに明細の税込金額を合計し、
+      税率で1回だけ逆算して税抜小計（`subtotalJpy`）と税額（`taxTotalJpy`）に分解する
+      （§6.4のとおり明細単位では税額計算しない）。**値引きは税抜小計・税額の内訳には反映させず、
+      確定金額（`totalJpy = subtotalJpy - discountTotalJpy + taxTotalJpy`）からのみ差し引く簡易
+      方式**とした（値引き後の按分・再計算は行わない）。インボイス対応の正式な内訳表示が必要な
+      レシート・領収書（FR-G08・G09）は次のステップで実装する際に、この簡易方式を見直す。
+    - **値引き・クーポン・端数調整（FR-G02）**：`POST /api/v1/stores/{storeId}/checks/{checkId}/discounts`
+      （`type`＝`AMOUNT`／`RATE`／`COUPON`／`ROUNDING`、`reason`）。`RATE` はその時点の残額
+      （小計＋税−既存値引き）に対する割合として円換算する。
+    - **混合支払い・現金の釣り銭（FR-G03・G05・G06・G07・G07b）**：
+      `POST .../checks/{checkId}/payments`（`methodType`／`amountJpy`、現金のみ`tenderedJpy`
+      で釣り銭を自動計算）。店舗で有効化されている決済手段（FR-B04・FR-G04）以外は拒否。
+      入金合計が確定金額に達した時点で会計を自動的に `FINALIZED` にする（`03` §4.6の不変条件
+      `Σ payment(SUCCESS).amount = check.total`）。
+    - **会計確定後、対象セッションの全 `check` が `FINALIZED`（`OPEN` が残っていない）になったら
+      `table_session` を `CLOSED` にし、`dining_table.status` を `EMPTY` に戻す**（懸案だった
+      「卓のクローズ」をここで実装。§4.2のとおり）。予約から着席したセッションは、このタイミングで
+      予約を `SEATED → DONE` に遷移させる（`03_domain_model.md` §4.1）。
+    - **取消・返金・値引き（FR-G10）**：会計確定前の取消は
+      `POST .../checks/{checkId}/void`（`guest_check_line`の割当を解除し明細を再度会計可能に
+      戻す。他に有効な会計が残っていなければ `table_session` を `OPEN` に、卓を `OCCUPIED` に
+      戻す）。確定後の返金は `POST .../checks/{checkId}/refunds`（`guest_check` 本体は不変、
+      返金イベントを追加するのみ）。値引き・取消・返金は店舗設定「要店長承認」
+      （`store_setting.require_manager_approval_for_void_refund`。新設。既定`false`＝ホールも可。
+      `02` §3.2「会計の取消・返金・値引き｜◯｜◯｜△※」に対応）に応じて
+      `StoreAccessGuard#requireCanAdjustCheck` で権限を絞る。会計の確定・取消・返金・値引きは
+      すべて `audit_log`（`CHECK_FINALIZE`／`CHECK_VOID`／`CHECK_REFUND`／`CHECK_DISCOUNT`）に
+      無条件で記録する（FR-J01）。
+    - **あえて見送った範囲**：①**レシート・領収書のPDF発行（FR-G08・G09）**：`receipt` テーブル・
+      インボイス対応の正式な書式は次のステップで対応する。②**決済代行との自動連携
+      （PayPay加盟店API・カード決済代行SDK・Webhook。§7.1・§7.3）**：契約先が決まってから
+      追加する。③**割り勘の人数按分計算（FR-G11の一部）**：`guest_check.splitType`／
+      `splitCount` の列はあるが、今回は別会計（明細を分けて複数 `check` を作る）のみ実装し、
+      1つの会計を人数で自動按分する専用UIは作っていない（スタッフが複数の決済を組み合わせて
+      記録することで運用上は対応可能）。④**外部決済端末・SDK連携の詳細（FR-G12）**：③と同様
+      契約待ち。実装したクラス：`GuestCheck`／`GuestCheckLine`／`GuestCheckDiscount`／
+      `GuestCheckTaxLine`／`Payment`／`Refund`（エンティティ）、`CheckoutService`（サービス）、
+      `CheckoutController`（コントローラー）。フロントは `注文管理`（`FloorPage.tsx`）内に会計
+      画面を追加（別画面には分けていない）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1455,7 +1512,7 @@ CREATE TABLE outbound_message (
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
 | 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
-| 会計 | `POST /api/v1/table-sessions/{id}/checks`、`POST .../checks/{id}/payments`、`POST .../checks/{id}/finalize`、`POST .../checks/{id}/refunds` | FR-G01〜G12 |
+| 会計 | `GET/POST /api/v1/stores/{storeId}/table-sessions/{sessionId}/checks`、`GET /api/v1/stores/{storeId}/checks/{checkId}`、`POST .../checks/{checkId}/discounts`、`POST .../checks/{checkId}/payments`（入金合計が達すると自動でFINALIZED。`finalize`単独APIは無し）、`POST .../checks/{checkId}/void`、`POST .../checks/{checkId}/refunds`。権限は`StoreAccessGuard#requireCanManageFloor`（確定まで）／`requireCanAdjustCheck`（値引き・取消・返金、要店長承認設定あり）。決済は全手段フェーズ1は手入力方式（2026-09-18追補） | FR-G01〜G05・G06・G07・G07b・G10・G11 |
 | 日次締め | `POST /api/v1/stores/{storeId}/daily-closes`、`GET .../sales-daily-reports` | FR-H01〜H05 |
 | シフト・勤怠 | `GET/POST /api/v1/stores/{storeId}/staff`、`.../shift-requests`、`.../shift-schedules`、`POST .../time-clocks` | FR-I01〜I06 |
 | 監査ログ | `GET /api/v1/audit-logs`（`?storeId=&action=&actor=&from=&to=&page=&size=`。テナントはJWTから解決するため、他APIと同様パスに `companyCode` は含めない。経営管理者は全店、店長は自店のみ閲覧可） | FR-J04 |

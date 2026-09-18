@@ -55,4 +55,8 @@ public class StoreSetting extends BaseEntity {
     /** 提供後の注文明細の取消（FR-E03）を店長承認必須にするか。既定falseはホールも取消可。 */
     @Column(name = "require_manager_approval_for_serve_cancel", nullable = false)
     private boolean requireManagerApprovalForServeCancel = false;
+
+    /** 会計の取消・返金・値引き（FR-G10）を店長承認必須にするか。既定falseはホールも可。 */
+    @Column(name = "require_manager_approval_for_void_refund", nullable = false)
+    private boolean requireManagerApprovalForVoidRefund = false;
 }

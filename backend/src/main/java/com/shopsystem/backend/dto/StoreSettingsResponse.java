@@ -24,4 +24,6 @@ public class StoreSettingsResponse {
     private boolean cancelChargeDefaultStore;
     /** 提供後の注文明細の取消を店長承認必須にするか（FR-E03）。 */
     private boolean requireManagerApprovalForServeCancel;
+    /** 会計の取消・返金・値引きを店長承認必須にするか（FR-G10）。 */
+    private boolean requireManagerApprovalForVoidRefund;
 }

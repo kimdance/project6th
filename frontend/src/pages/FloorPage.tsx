@@ -20,6 +20,19 @@ import {
   type OrderLine,
   type CancelReason,
 } from '../api/floor';
+import {
+  fetchPaymentMethods,
+  fetchChecks,
+  createCheck,
+  applyDiscount,
+  addPayment,
+  voidCheck,
+  refundCheck,
+  type GuestCheck,
+  type PaymentMethod,
+  type PaymentMethodType,
+  type DiscountType,
+} from '../api/checkout';
 
 const TABLE_STATUS_LABELS: Record<string, string> = {
   EMPTY: '空席',
@@ -38,6 +51,26 @@ const SERVE_STATUS_LABELS: Record<string, string> = {
   SERVED: '提供済み',
   CANCELLED: '取消',
   REJECTED: '却下',
+};
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
+  CASH: '現金',
+  PAYPAY: 'PayPay',
+  CREDIT_CARD: 'クレジットカード',
+  RAKUTEN_PAY: '楽天ペイ',
+};
+
+const DISCOUNT_TYPE_OPTIONS: { value: DiscountType; label: string }[] = [
+  { value: 'AMOUNT', label: '金額指定' },
+  { value: 'RATE', label: '率指定（%）' },
+  { value: 'COUPON', label: 'クーポン' },
+  { value: 'ROUNDING', label: '端数調整' },
+];
+
+const CHECK_STATUS_LABELS: Record<string, string> = {
+  OPEN: '会計中',
+  FINALIZED: '会計済み',
+  VOIDED: '取消済み',
 };
 
 const CANCEL_REASON_OPTIONS: { value: CancelReason; label: string }[] = [
@@ -60,7 +93,7 @@ function formatTime(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-type View = 'select-store' | 'board' | 'open' | 'order';
+type View = 'select-store' | 'board' | 'open' | 'order' | 'checkout';
 type SeatTypeFilter = 'ALL' | SeatType;
 type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
@@ -97,6 +130,19 @@ export const FloorPage: React.FC = () => {
   const [cancellingLine, setCancellingLine] = useState<OrderLine | null>(null);
   const [cancelReason, setCancelReason] = useState<CancelReason>('ORDER_MISTAKE');
   const [wasCooked, setWasCooked] = useState(false);
+
+  const [activeCheck, setActiveCheck] = useState<GuestCheck | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [discountType, setDiscountType] = useState<DiscountType>('AMOUNT');
+  const [discountValue, setDiscountValue] = useState(0);
+  const [discountReason, setDiscountReason] = useState('');
+  const [paymentMethodType, setPaymentMethodType] = useState<PaymentMethodType>('CASH');
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentTendered, setPaymentTendered] = useState(0);
+  const [refundingOpen, setRefundingOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundReasonNote, setRefundReasonNote] = useState('');
 
   const [messages, setMessages] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
@@ -328,6 +374,164 @@ export const FloorPage: React.FC = () => {
       setSaving(false);
     }
   };
+
+  const openCheckout = async () => {
+    if (storeId === null || detail === null) return;
+    resetMessages();
+    setSaving(true);
+    try {
+      const [methods, checks] = await Promise.all([
+        fetchPaymentMethods(storeId),
+        fetchChecks(storeId, detail.session.id),
+      ]);
+      setPaymentMethods(methods.filter((m) => m.enabled));
+
+      let check = checks.find((c) => c.status === 'OPEN') ?? null;
+      if (!check) {
+        const result = await createCheck(storeId, detail.session.id);
+        if (!result.ok) {
+          setMessages(result.errors.map((e2) => e2.message));
+          return;
+        }
+        check = result.data;
+      }
+      setActiveCheck(check);
+      setDiscountType('AMOUNT');
+      setDiscountValue(0);
+      setDiscountReason('');
+      setPaymentAmount(check.balanceJpy);
+      setPaymentTendered(check.balanceJpy);
+      setView('checkout');
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['サーバーとの通信に失敗しました。']);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitDiscount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (storeId === null || activeCheck === null) return;
+    resetMessages();
+    setSaving(true);
+    try {
+      const result = await applyDiscount(storeId, activeCheck.id, {
+        type: discountType,
+        value: discountValue,
+        reason: discountReason,
+      });
+      if (!result.ok) {
+        setMessages(result.errors.map((e2) => e2.message));
+        return;
+      }
+      setActiveCheck(result.data);
+      setPaymentAmount(result.data.balanceJpy);
+      setPaymentTendered(result.data.balanceJpy);
+      setDiscountValue(0);
+      setDiscountReason('');
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['サーバーとの通信に失敗しました。']);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (storeId === null || activeCheck === null) return;
+    resetMessages();
+    setSaving(true);
+    try {
+      const result = await addPayment(storeId, activeCheck.id, {
+        methodType: paymentMethodType,
+        amountJpy: paymentAmount,
+        tenderedJpy: paymentMethodType === 'CASH' ? paymentTendered : undefined,
+      });
+      if (!result.ok) {
+        setMessages(result.errors.map((e2) => e2.message));
+        return;
+      }
+      setActiveCheck(result.data);
+      setPaymentAmount(result.data.balanceJpy);
+      setPaymentTendered(result.data.balanceJpy);
+      if (result.data.status === 'FINALIZED') {
+        setSuccessMessage('会計が完了しました。');
+        if (storeId !== null) {
+          await refreshBoard(storeId);
+        }
+      }
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['サーバーとの通信に失敗しました。']);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVoidCheck = async () => {
+    if (storeId === null || activeCheck === null) return;
+    resetMessages();
+    setSaving(true);
+    try {
+      const result = await voidCheck(storeId, activeCheck.id);
+      if (!result.ok) {
+        setMessages(result.errors.map((e2) => e2.message));
+        return;
+      }
+      setSuccessMessage('会計を取消しました。');
+      setView('order');
+      await refreshOrder();
+      if (storeId !== null) {
+        await refreshBoard(storeId);
+      }
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['サーバーとの通信に失敗しました。']);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openRefundDialog = () => {
+    if (activeCheck === null) return;
+    resetMessages();
+    setRefundAmount(activeCheck.totalJpy);
+    setRefundReason('CUSTOMER');
+    setRefundReasonNote('');
+    setRefundingOpen(true);
+  };
+
+  const submitRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (storeId === null || activeCheck === null) return;
+    resetMessages();
+    setSaving(true);
+    try {
+      const result = await refundCheck(storeId, activeCheck.id, {
+        paymentId: null,
+        amountJpy: refundAmount,
+        reason: refundReason,
+        reasonNote: refundReasonNote,
+      });
+      if (!result.ok) {
+        setMessages(result.errors.map((e2) => e2.message));
+        return;
+      }
+      setActiveCheck(result.data);
+      setRefundingOpen(false);
+      setSuccessMessage('返金を記録しました。');
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setMessages(['サーバーとの通信に失敗しました。']);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasBillableLines =
+    detail !== null && detail.lines.some((l) => l.serveStatus !== 'CANCELLED' && l.serveStatus !== 'REJECTED');
 
   const visibleMenuItems = menuItems.filter(
     (item) =>
@@ -647,7 +851,254 @@ export const FloorPage: React.FC = () => {
             </button>
           )}
 
+          {hasBillableLines && (
+            <button type="button" onClick={openCheckout} disabled={saving} style={submitButtonStyle}>
+              会計を始める
+            </button>
+          )}
+
           <button type="button" onClick={() => setView('board')} style={backButtonStyle}>
+            ← 卓一覧に戻る
+          </button>
+        </>
+      )}
+
+      {view === 'checkout' && activeCheck !== null && (
+        <>
+          <p>
+            卓 {detail?.session.tableNo} ・ 会計 #{activeCheck.seqInSession}（
+            {CHECK_STATUS_LABELS[activeCheck.status] ?? activeCheck.status}）
+          </p>
+
+          <h3 style={{ marginTop: '20px' }}>明細</h3>
+          {activeCheck.lines.map((line) => (
+            <div key={line.id} style={lineCardStyle('OPEN')}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>
+                  {line.itemNameSnap} × {line.quantity}
+                </span>
+                <span>{line.amountJpy}円</span>
+              </div>
+            </div>
+          ))}
+
+          <div style={{ marginTop: '16px', borderTop: '1px solid #ddd', paddingTop: '12px' }}>
+            <div style={summaryRowStyle}>
+              <span>税抜小計</span>
+              <span>{activeCheck.subtotalJpy}円</span>
+            </div>
+            {activeCheck.discountTotalJpy > 0 && (
+              <div style={summaryRowStyle}>
+                <span>値引き</span>
+                <span>−{activeCheck.discountTotalJpy}円</span>
+              </div>
+            )}
+            <div style={summaryRowStyle}>
+              <span>消費税</span>
+              <span>{activeCheck.taxTotalJpy}円</span>
+            </div>
+            <div style={{ ...summaryRowStyle, fontWeight: 600, fontSize: '18px' }}>
+              <span>合計</span>
+              <span>{activeCheck.totalJpy}円</span>
+            </div>
+            {activeCheck.paidTotalJpy > 0 && (
+              <div style={summaryRowStyle}>
+                <span>入金済み</span>
+                <span>{activeCheck.paidTotalJpy}円</span>
+              </div>
+            )}
+            {activeCheck.status === 'OPEN' && (
+              <div style={{ ...summaryRowStyle, fontWeight: 600 }}>
+                <span>残額</span>
+                <span>{activeCheck.balanceJpy}円</span>
+              </div>
+            )}
+          </div>
+
+          {activeCheck.discounts.length > 0 && (
+            <div style={{ marginTop: '12px', fontSize: '13px', color: '#666' }}>
+              {activeCheck.discounts.map((d) => (
+                <div key={d.id}>
+                  値引き: {d.amountJpy}円（{DISCOUNT_TYPE_OPTIONS.find((o) => o.value === d.type)?.label}
+                  {d.reason ? ` ・ ${d.reason}` : ''}）
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeCheck.status === 'OPEN' && (
+            <form onSubmit={submitDiscount} style={sectionBoxStyle}>
+              <h3 style={{ marginTop: 0 }}>値引き・クーポン</h3>
+              <FormField label="種類">
+                <select
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                  style={inputStyle}
+                >
+                  {DISCOUNT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label={discountType === 'RATE' ? '割引率（%）' : '金額（円）'}>
+                <input
+                  type="number"
+                  value={discountValue === 0 ? '' : discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value === '' ? 0 : Number(e.target.value))}
+                  style={inputStyle}
+                />
+              </FormField>
+              <FormField label="理由（任意）">
+                <input
+                  type="text"
+                  value={discountReason}
+                  onChange={(e) => setDiscountReason(e.target.value)}
+                  style={inputStyle}
+                />
+              </FormField>
+              <button type="submit" disabled={saving || discountValue === 0} style={submitButtonStyle}>
+                {saving ? '処理中...' : '値引きを適用する'}
+              </button>
+            </form>
+          )}
+
+          {activeCheck.status === 'OPEN' && activeCheck.balanceJpy > 0 && (
+            <form onSubmit={submitPayment} style={sectionBoxStyle}>
+              <h3 style={{ marginTop: 0 }}>支払いを記録</h3>
+              <FormField label="決済手段">
+                <select
+                  value={paymentMethodType}
+                  onChange={(e) => setPaymentMethodType(e.target.value as PaymentMethodType)}
+                  style={inputStyle}
+                >
+                  {paymentMethods.map((m) => (
+                    <option key={m.methodType} value={m.methodType}>
+                      {m.displayName || PAYMENT_METHOD_LABELS[m.methodType]}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              {paymentMethods.length === 0 && (
+                <p style={{ color: '#dc3545', fontSize: '13px' }}>
+                  有効な決済手段がありません。店舗設定の「決済手段」から有効化してください。
+                </p>
+              )}
+              <FormField label="金額（円）">
+                <input
+                  type="number"
+                  value={paymentAmount === 0 ? '' : paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  style={inputStyle}
+                />
+              </FormField>
+              {paymentMethodType === 'CASH' && (
+                <FormField label="預り金（円）">
+                  <input
+                    type="number"
+                    value={paymentTendered === 0 ? '' : paymentTendered}
+                    onChange={(e) => setPaymentTendered(e.target.value === '' ? 0 : Number(e.target.value))}
+                    style={inputStyle}
+                  />
+                  {paymentTendered > paymentAmount && (
+                    <p style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                      お釣り: {paymentTendered - paymentAmount}円
+                    </p>
+                  )}
+                </FormField>
+              )}
+              <button
+                type="submit"
+                disabled={saving || paymentMethods.length === 0 || paymentAmount <= 0}
+                style={submitButtonStyle}
+              >
+                {saving ? '処理中...' : 'この支払いを記録する'}
+              </button>
+            </form>
+          )}
+
+          {activeCheck.payments.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h3>支払い履歴</h3>
+              {activeCheck.payments.map((p) => (
+                <div key={p.id} style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>
+                  {PAYMENT_METHOD_LABELS[p.methodType]}: {p.amountJpy}円
+                  {p.methodType === 'CASH' && p.changeJpy ? `（お釣り${p.changeJpy}円）` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeCheck.status === 'OPEN' && (
+            <button type="button" onClick={handleVoidCheck} disabled={saving} style={backButtonStyle}>
+              会計を取消する
+            </button>
+          )}
+
+          {activeCheck.status === 'FINALIZED' && !refundingOpen && (
+            <button type="button" onClick={openRefundDialog} style={backButtonStyle}>
+              返金する
+            </button>
+          )}
+
+          {refundingOpen && (
+            <form onSubmit={submitRefund} style={sectionBoxStyle}>
+              <h3 style={{ marginTop: 0 }}>返金</h3>
+              <FormField label="金額（円）">
+                <input
+                  type="number"
+                  value={refundAmount === 0 ? '' : refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  style={inputStyle}
+                />
+              </FormField>
+              <FormField label="理由">
+                <input
+                  type="text"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  required
+                  style={inputStyle}
+                />
+              </FormField>
+              <FormField label="補足（任意）">
+                <input
+                  type="text"
+                  value={refundReasonNote}
+                  onChange={(e) => setRefundReasonNote(e.target.value)}
+                  style={inputStyle}
+                />
+              </FormField>
+              <button type="submit" disabled={saving} style={submitButtonStyle}>
+                {saving ? '処理中...' : '返金を記録する'}
+              </button>
+              <button type="button" onClick={() => setRefundingOpen(false)} style={backButtonStyle}>
+                キャンセル
+              </button>
+            </form>
+          )}
+
+          {activeCheck.refunds.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h3>返金履歴</h3>
+              {activeCheck.refunds.map((r) => (
+                <div key={r.id} style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>
+                  {r.amountJpy}円（{r.reason}）
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCheck(null);
+              setRefundingOpen(false);
+              setView('board');
+            }}
+            style={backButtonStyle}
+          >
             ← 卓一覧に戻る
           </button>
         </>
@@ -710,6 +1161,19 @@ const qtyButtonStyle: React.CSSProperties = {
   border: '1px solid #007bff',
   borderRadius: '4px',
   cursor: 'pointer',
+};
+
+const summaryRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  padding: '4px 0',
+};
+
+const sectionBoxStyle: React.CSSProperties = {
+  border: '1px solid #ddd',
+  borderRadius: '8px',
+  padding: '12px',
+  marginTop: '16px',
 };
 
 function boardButtonStyle(background: string): React.CSSProperties {

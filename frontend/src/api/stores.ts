@@ -36,6 +36,8 @@ export interface StoreSettings {
   cancelChargeDefaultStore: boolean;
   /** 提供後の注文明細の取消を店長承認必須にするか（FR-E03）。 */
   requireManagerApprovalForServeCancel: boolean;
+  /** 会計の取消・返金・値引きを店長承認必須にするか（FR-G10）。 */
+  requireManagerApprovalForVoidRefund: boolean;
 }
 
 /** PUT の送信ボディ。フォームで扱いやすいよう、null は使わず空文字を許容する。 */
@@ -54,6 +56,7 @@ export interface StoreSettingsRequest {
   cancelChargeDefaultCustomer: boolean;
   cancelChargeDefaultStore: boolean;
   requireManagerApprovalForServeCancel: boolean;
+  requireManagerApprovalForVoidRefund: boolean;
 }
 
 /** 自テナントの店舗一覧。0件（未作成）または複数件。 */

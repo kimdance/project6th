@@ -112,6 +112,23 @@ public class StoreAccessGuard {
         }
     }
 
+    /**
+     * 会計の取消・返金・値引き（FR-G10）：店舗設定で「要店長承認」が有効な場合は経営管理者・
+     * 店長のみ、無効な場合は {@link #requireCanManageFloor} と同じ（ホールも可）。
+     */
+    public void requireCanAdjustCheck(Long storeId, boolean requireManagerApproval) {
+        if (!requireManagerApproval) {
+            requireCanManageFloor(storeId);
+            return;
+        }
+        TenantContext.Data ctx = TenantContext.get();
+        boolean allowed = "OWNER".equals(ctx.role())
+                || ("MANAGER".equals(ctx.role()) && ctx.storeIds().contains(storeId));
+        if (!allowed) {
+            throw forbidden();
+        }
+    }
+
     public void requireOwner() {
         if (!"OWNER".equals(TenantContext.get().role())) {
             throw forbidden();

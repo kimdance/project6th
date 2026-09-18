@@ -44,6 +44,7 @@ const EMPTY_SETTINGS_FORM: StoreSettingsRequest = {
   cancelChargeDefaultCustomer: true,
   cancelChargeDefaultStore: false,
   requireManagerApprovalForServeCancel: false,
+  requireManagerApprovalForVoidRefund: false,
 };
 
 type View = 'list' | 'create' | 'edit';
@@ -140,6 +141,7 @@ export const StoreSettingsPage: React.FC = () => {
       cancelChargeDefaultCustomer: settings.cancelChargeDefaultCustomer,
       cancelChargeDefaultStore: settings.cancelChargeDefaultStore,
       requireManagerApprovalForServeCancel: settings.requireManagerApprovalForServeCancel,
+      requireManagerApprovalForVoidRefund: settings.requireManagerApprovalForVoidRefund,
     });
     setView('edit');
   };
@@ -517,6 +519,25 @@ export const StoreSettingsPage: React.FC = () => {
               </label>
               <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
                 ※チェックを外すと、ホールスタッフも提供済みの品を取消できます（既定）。提供前の取消はこの設定に関わらず行えます。
+              </p>
+            </FormField>
+            <FormField label="会計の取消・返金・値引き">
+              <label style={{ display: 'block' }}>
+                <input
+                  type="checkbox"
+                  checked={settingsForm.requireManagerApprovalForVoidRefund}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      requireManagerApprovalForVoidRefund: e.target.checked,
+                    }))
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                会計の取消・返金・値引きは店長・経営管理者のみ行える（要店長承認）
+              </label>
+              <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
+                ※チェックを外すと、ホールスタッフも会計の取消・返金・値引きができます（既定）。
               </p>
             </FormField>
             <SubmitButton saving={saving} label="保存する" />
