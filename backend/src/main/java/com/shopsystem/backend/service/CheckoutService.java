@@ -112,7 +112,8 @@ public class CheckoutService {
             throw new BusinessException(List.of(err("checkout.error.session.not-billable", null)));
         }
 
-        List<OrderLine> candidateLines = orderLineRepository.findAllByTableSession_IdOrderByRegisteredAt(sessionId)
+        List<OrderLine> candidateLines = orderLineRepository
+                .findAllByTableSession_IdOrderByRegisteredAtAscIdAsc(sessionId)
                 .stream()
                 .filter(l -> !UNBILLABLE_SERVE_STATUSES.contains(l.getServeStatus()))
                 .filter(l -> !guestCheckLineRepository.existsByOrderLine_Id(l.getId()))

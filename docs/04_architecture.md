@@ -623,6 +623,19 @@
     （引数を渡さず呼び出す）に修正した。TypeScriptの型チェックではこの種の不整合
     （関数に任意引数があると、クリックイベントの型と噛み合っていても検出されないことがある）
     を検出できなかったため、実機確認で見つけて修正した。`FloorPage.tsx` の表示のみの変更。
+  - 2026-09-18 追補（不具合修正：提供済み・取消等の操作後に明細の並び順が変わる。FR-E02・E07）：
+    「現在の注文」で品目を「提供済みにする」「取消する」「作り直す」と、他の明細と並び順が
+    入れ替わって見える不具合の報告を受け調査した。`GET .../table-sessions/{sessionId}` の明細
+    一覧は `order_line.registered_at`（登録時刻）の昇順で返しているが、同じ「注文送信」で
+    まとめて登録した明細は `registered_at` が完全に同一の値になる（`OrderService#submit` が
+    1回だけ取得した `now` をその送信内の全明細に使うため）。同点（タイ）になった行同士の
+    順序はSQL上保証されないため、明細の状態を更新（UPDATE）した際にPostgreSQL内部の行の
+    並びが変わり、次の取得で見た目の順番が変わることがあった。`OrderLineRepository` の一覧
+    取得を `registered_at` に加えて `id`（登録順と一致する連番。更新しても変わらない）を
+    第2キーにするよう修正し、常に安定した順序で返るようにした
+    （`findAllByTableSession_IdOrderByRegisteredAtAscIdAsc`。`OrderService#getSessionDetail`・
+    `CheckoutService#createCheck` の両方で使用）。実機で複数明細を同時送信したうえで
+    状態を繰り返し変更し、並び順が変わらなくなったことを確認した。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、

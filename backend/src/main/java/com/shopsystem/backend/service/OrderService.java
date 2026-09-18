@@ -62,7 +62,8 @@ public class OrderService {
     /** 卓セッションの詳細（現在の注文明細一覧）。注文入力画面の初期表示・再取得に使う。 */
     public TableSessionDetailResponse getSessionDetail(Long storeId, Long sessionId) {
         var session = tableSessionService.get(storeId, sessionId);
-        List<OrderLineResponse> lines = orderLineRepository.findAllByTableSession_IdOrderByRegisteredAt(sessionId)
+        List<OrderLineResponse> lines = orderLineRepository
+                .findAllByTableSession_IdOrderByRegisteredAtAscIdAsc(sessionId)
                 .stream().map(this::toLineResponse).toList();
         return new TableSessionDetailResponse(session, lines);
     }
