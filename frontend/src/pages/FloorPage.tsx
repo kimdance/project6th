@@ -834,7 +834,26 @@ export const FloorPage: React.FC = () => {
             </form>
           )}
 
-          <h3 style={{ marginTop: '24px' }}>追加注文</h3>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '24px',
+            }}
+          >
+            <h3 style={{ margin: 0 }}>追加注文</h3>
+            {cart.length > 0 && (
+              <button
+                type="button"
+                onClick={submitCart}
+                disabled={saving}
+                style={{ ...qtyButtonStyle, padding: '8px 16px' }}
+              >
+                {saving ? '送信中...' : `注文送信（${cart.reduce((n, c) => n + c.quantity, 0)}点）`}
+              </button>
+            )}
+          </div>
           {cart.length > 0 && (
             <div style={{ marginBottom: '15px' }}>
               {cart.map((c) => {
@@ -939,12 +958,6 @@ export const FloorPage: React.FC = () => {
               </div>
             );
           })}
-
-          {cart.length > 0 && (
-            <button type="button" onClick={submitCart} disabled={saving} style={submitButtonStyle}>
-              {saving ? '送信中...' : `注文を送信する（${cart.reduce((n, c) => n + c.quantity, 0)}点）`}
-            </button>
-          )}
 
           <button type="button" onClick={() => setView('board')} style={backButtonStyle}>
             ← 卓一覧に戻る
