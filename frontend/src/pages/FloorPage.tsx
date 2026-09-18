@@ -359,23 +359,25 @@ export const FloorPage: React.FC = () => {
           {tables.length === 0 && <p style={{ color: '#666' }}>卓がまだ登録されていません。</p>}
           {tables.map((table) => {
             const session = sessions.find((s) => s.diningTableId === table.id);
-            const canEdit = canOperate(storeId);
+            // 無効な卓は新規オープン不可（既にオープン済みのセッションがあれば、その注文の管理は続けられる）。
+            const canOpen = table.status === 'EMPTY' && table.active;
+            const clickable = canOperate(storeId) && (canOpen || session !== undefined);
             return (
               <button
                 key={table.id}
                 type="button"
-                disabled={!canEdit}
-                onClick={() =>
-                  table.status === 'EMPTY' ? openOpenForm(table) : session && openSessionOrder(session.id)
-                }
+                disabled={!clickable}
+                onClick={() => (canOpen ? openOpenForm(table) : session && openSessionOrder(session.id))}
                 style={{
                   ...boardButtonStyle(table.status === 'EMPTY' ? '#fff' : '#eef6ff'),
-                  cursor: canEdit ? 'pointer' : 'default',
+                  cursor: clickable ? 'pointer' : 'default',
+                  opacity: table.active ? 1 : 0.6,
                 }}
               >
                 <div style={{ fontWeight: 600 }}>
                   {table.tableNo}
                   {table.area ? `（${table.area}）` : ''}
+                  {!table.active && '　[無効]'}
                 </div>
                 <div style={{ fontSize: '13px', color: '#666' }}>
                   {TABLE_STATUS_LABELS[table.status] ?? table.status}

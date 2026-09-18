@@ -441,7 +441,14 @@
       実装したクラス：`TableSession`／`TableSessionTable`／`CustomerOrder`／`OrderLine`／
       `KitchenTicket`（エンティティ）、`TableSessionService`／`OrderService`（サービス）、
       `TableSessionController`／`OrderController`（コントローラー）。
-- **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
+  - 2026-09-18 追補（卓オープンの不具合修正：無効な卓もオープンできてしまう。FR-E01）：
+    `TableSessionService#open` が卓の状態（`EMPTY`）のみを確認し、`dining_table.is_active`
+    （卓マスタ画面の「無効」設定）を確認していなかったため、卓マスタで無効化した卓でも
+    オープン・注文入力ができてしまう不具合があった（実機確認で発見）。`open` に
+    `table.isActive()` のチェックを追加し、無効な卓は400（`floor.error.table.inactive`）で
+    拒否するよう修正した。フロント（`FloorPage.tsx`）も、卓ボードで無効な卓（`EMPTY`）を
+    オープン不可の見た目にし、`[無効]` 表示を追加した（既にオープン済みのセッションが
+    ある無効な卓は、その注文の管理だけは引き続き行える）。 `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
 > 決済連携詳細、`domain_event` 実装方式、Mermaid図のPDFレンダリング方針、データ保持期間）と、

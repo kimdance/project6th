@@ -83,6 +83,8 @@ public class TableSessionService {
             table = diningTableRepository.findByIdAndStore_Id(req.getDiningTableId(), storeId).orElse(null);
             if (table == null) {
                 errors.add(err("floor.error.table.invalid", "diningTableId"));
+            } else if (!table.isActive()) {
+                errors.add(err("floor.error.table.inactive", "diningTableId"));
             } else if (!"EMPTY".equals(table.getStatus())) {
                 errors.add(err("floor.error.table.not-empty", "diningTableId"));
             }
