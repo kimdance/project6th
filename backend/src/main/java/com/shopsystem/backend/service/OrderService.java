@@ -70,6 +70,7 @@ public class OrderService {
     /** 注文を送信する（FR-E02）。STAFF入力は自動ACCEPTED、調理が要る明細があればキッチン伝票を発行する（FR-E04）。 */
     @Transactional
     public TableSessionDetailResponse submit(Long storeId, Long sessionId, SubmitOrderRequest req) {
+        accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanManageFloor(storeId);
         TableSession session = tableSessionService.getEntity(storeId, sessionId);
         if (!"OPEN".equals(session.getStatus())) {
@@ -154,6 +155,7 @@ public class OrderService {
     /** 数量・メモの変更（FR-E03）。まだ提供前（PENDING）の明細のみ変更できる。 */
     @Transactional
     public OrderLineResponse updateLine(Long storeId, Long lineId, UpdateOrderLineRequest req) {
+        accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanManageFloor(storeId);
         OrderLine line = findLine(storeId, lineId);
 
@@ -175,6 +177,7 @@ public class OrderService {
      */
     @Transactional
     public OrderLineResponse cancelLine(Long storeId, Long lineId, CancelOrderLineRequest req) {
+        accessGuard.requireStoreInTenant(storeId);
         OrderLine line = findLine(storeId, lineId);
         boolean wasServed = "SERVED".equals(line.getServeStatus());
 
@@ -219,6 +222,7 @@ public class OrderService {
     /** 作り直し（FR-E03c）。取消済み（CANCELLED）の明細を元に、新規明細を作成し remakeOfLineId で関連付ける。 */
     @Transactional
     public OrderLineResponse remakeLine(Long storeId, Long lineId, RemakeOrderLineRequest req) {
+        accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanManageFloor(storeId);
         OrderLine original = findLine(storeId, lineId);
         if (!"CANCELLED".equals(original.getServeStatus())) {
@@ -273,6 +277,7 @@ public class OrderService {
     /** 提供済みにする（FR-E07）。KDS画面は未実装のため、ホールがこの操作で提供状態を記録する。 */
     @Transactional
     public OrderLineResponse markServed(Long storeId, Long lineId) {
+        accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanManageFloor(storeId);
         OrderLine line = findLine(storeId, lineId);
         if (!CANCELLABLE_BEFORE_SERVE.contains(line.getServeStatus())) {

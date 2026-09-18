@@ -448,7 +448,22 @@
     `table.isActive()` のチェックを追加し、無効な卓は400（`floor.error.table.inactive`）で
     拒否するよう修正した。フロント（`FloorPage.tsx`）も、卓ボードで無効な卓（`EMPTY`）を
     オープン不可の見た目にし、`[無効]` 表示を追加した（既にオープン済みのセッションが
-    ある無効な卓は、その注文の管理だけは引き続き行える）。 `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
+    ある無効な卓は、その注文の管理だけは引き続き行える）。
+  - 2026-09-18 追補（テナント分離の不備を修正：他テナントの店舗データを操作できてしまう。
+    FR-A06・NFR-09）：`OrderService` の5メソッド（`submit`／`updateLine`／`cancelLine`／
+    `remakeLine`／`markServed`）が、`storeId` が呼び出し元のテナントに属するかの確認
+    （`StoreAccessGuard#requireStoreInTenant`）を行わずに `requireCanManageFloor` 等の権限
+    チェックだけを行っていた。`requireCanManageFloor`・`requireCanCancelServedLine` は
+    経営管理者（`OWNER`）に対して `storeId` を問わず常に許可する作りのため（他の
+    `requireCanEdit`／`requireCanManageReservations` 等と同じ設計）、他社のテナントの
+    経営管理者が、自分のテナントとは無関係な他社の `storeId`／`sessionId`／`lineId` を
+    指定すると、権限チェックを素通りしてその店舗の卓オープン・注文操作ができてしまう状態
+    だった（`TableSessionService#open` 等の他のメソッドは元から `requireStoreInTenant` を
+    先頭で呼んでおり対象外）。実機で2テナントを使い再現・修正を確認したうえで、該当5
+    メソッドの先頭に `requireStoreInTenant` を追加し、`02_requirements.md` FR-A06
+    （テナント分離）の要件どおり、他テナントの `storeId` を指定した場合は404
+    （存在有無を漏らさない）を返すようにした。
+- **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
 > 決済連携詳細、`domain_event` 実装方式、Mermaid図のPDFレンダリング方針、データ保持期間）と、
