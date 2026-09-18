@@ -82,6 +82,7 @@ public class CheckoutService {
     private final ReservationRepository reservationRepository;
     private final PaymentMethodConfigRepository paymentMethodConfigRepository;
     private final StoreSettingRepository storeSettingRepository;
+    private final TaxRateService taxRateService;
     private final UserRepository userRepository;
     private final MessageSource messageSource;
     private final StoreAccessGuard accessGuard;
@@ -158,7 +159,7 @@ public class CheckoutService {
             guestCheckLineRepository.save(checkLine);
         }
 
-        recomputeTaxAndSubtotal(check, targetLines);
+        recomputeTaxAndSubtotal(storeId, check, targetLines);
         check.setTotalJpy(check.getSubtotalJpy() - check.getDiscountTotalJpy() + check.getTaxTotalJpy());
         guestCheckRepository.save(check);
 
@@ -177,13 +178,15 @@ public class CheckoutService {
     }
 
     /**
-     * 税抜小計・税額の計算（FR-G01・G09。§6.4）。税区分ごとに明細の税込金額を合計し、税率で
-     * 1回だけ逆算して税抜額と税額に分解する（明細単位では税額を計算しない）。値引きは、この
-     * 税抜小計・税額には影響させず、確定金額（total）からのみ差し引く簡易方式とする
-     * （インボイス対応の正式な内訳表示はレシート・領収書機能〈FR-G08・G09〉の実装時に見直す）。
-     * 会計作成時に一度だけ計算し、以後（値引き追加時等）は再計算しない（明細は作成後に変更しない前提）。
+     * 税抜小計・税額の計算（FR-G01・G09・FR-B03。§6.4）。税区分ごとに明細の税込金額を合計し、
+     * その区分・会計の営業日時点で有効な税率（{@link TaxRateService#resolveRatePercent}。
+     * 店舗が変更していなければ既定のSTANDARD_10=10%／REDUCED_8=8%）で1回だけ逆算して税抜額と
+     * 税額に分解する（明細単位では税額を計算しない）。値引きは、この税抜小計・税額には
+     * 影響させず、確定金額（total）からのみ差し引く簡易方式とする（インボイス対応の正式な
+     * 内訳表示はレシート・領収書機能〈FR-G08・G09〉の実装時に見直す）。会計作成時に一度だけ
+     * 計算し、以後（値引き追加時等）は再計算しない（明細は作成後に変更しない前提）。
      */
-    private void recomputeTaxAndSubtotal(GuestCheck check, List<OrderLine> lines) {
+    private void recomputeTaxAndSubtotal(Long storeId, GuestCheck check, List<OrderLine> lines) {
         Map<String, Integer> grossByCategory = new LinkedHashMap<>();
         for (OrderLine line : lines) {
             String category = line.getTaxCategorySnap();
@@ -194,9 +197,12 @@ public class CheckoutService {
         int subtotal = 0;
         int taxTotal = 0;
         for (Map.Entry<String, Integer> entry : grossByCategory.entrySet()) {
-            int rate = "STANDARD_10".equals(entry.getKey()) ? 10 : 8;
+            BigDecimal rate = taxRateService.resolveRatePercent(storeId, entry.getKey(), check.getBusinessDate());
+            BigDecimal divisor = BigDecimal.valueOf(100).add(rate);
             int gross = entry.getValue();
-            int exclusive = Math.floorDiv(gross * 100, 100 + rate);
+            int exclusive = BigDecimal.valueOf(gross).multiply(BigDecimal.valueOf(100))
+                    .divide(divisor, 0, RoundingMode.FLOOR)
+                    .intValue();
             int tax = gross - exclusive;
             subtotal += exclusive;
             taxTotal += tax;

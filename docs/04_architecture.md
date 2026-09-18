@@ -564,6 +564,31 @@
       `GuestCheckTaxLine`／`Payment`／`Refund`（エンティティ）、`CheckoutService`（サービス）、
       `CheckoutController`（コントローラー）。フロントは `注文管理`（`FloorPage.tsx`）内に会計
       画面を追加（別画面には分けていない）。
+  - 2026-09-18 追補（税率を店舗ごとに変更可能に。FR-B03）：これまで消費税率（標準10%／軽減8%）は
+    `CheckoutService` に固定値として書かれており、店舗側で変更する手段が無かった。税区分の
+    コード（`STANDARD_10`／`REDUCED_8`）自体は変更せず、実際のパーセンテージだけを店舗ごとに
+    変更できるようにした（ロール `OWNER` の表示名を「経営管理者」に変えた時と同じ考え方
+    ——コードは変えず表示・値だけ変える）。新テーブル `tax_rate`（`store_id`・`tax_category`・
+    `rate_percent`・`effective_from`。`V18__tax_rate.sql`）を追加し、**終了日は持たせず**
+    「いつから適用するか」（`effective_from`）だけを記録する方式にした。ある区分の「今有効な
+    税率」は、同じ区分の中で `effective_from` が今日以前の行のうち最も新しいもの
+    （＝次の税率が始まる前日までが暗黙の終了日）。過去日を指定すれば遡って登録することもできる
+    （既存の過去会計の `guest_check_tax_line` は作成時点の値をスナップショットしたまま不変
+    ——§4.7のとおり——のため、遡って登録しても過去の会計記録は変わらない）。店舗が一度も
+    その区分の税率を登録していなければ、フェーズ1導入時点の既定値（`STANDARD_10`=10%／
+    `REDUCED_8`=8%）をそのまま使う（`TaxRateService#resolveRatePercent`）。
+    - `GET/POST /api/v1/stores/{storeId}/tax-rates`（一覧・追加。権限は店舗設定と同じ
+      `StoreAccessGuard#requireCanEdit`）、`DELETE .../tax-rates/{rateId}`（**まだ適用開始して
+      いない〈`effective_from` が未来の〉行のみ削除可**。既に適用済みの行は過去の会計計算に
+      影響するため削除させない）。
+    - `CheckoutService#recomputeTaxAndSubtotal` は、会計の営業日（`businessDate`）時点で
+      有効な税率を都度 `TaxRateService` から取得して税額計算するよう変更した（小数点以下の
+      税率にも対応するため `BigDecimal` で計算）。
+    - 店舗設定画面（`StoreSettingsPage.tsx`）の「税金設定」の下に「税率」セクションを追加し、
+      標準税率・軽減税率それぞれの履歴と「今適用中」の表示、新しい税率変更の追加フォームを
+      置いた（削除ボタンは未適用〈将来日付〉の行にのみ表示）。
+    - 実装したクラス：`TaxRate`（エンティティ）、`TaxRateService`（サービス）、
+      `TaxRateController`（コントローラー）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1507,7 +1532,7 @@ CREATE TABLE outbound_message (
 | ユーザー登録（現場スタッフの自己登録） | `POST /api/v1/auth/register`（ボディは `{ name, email, password, telnumber?, role }`。`company` はHostヘッダのサブドメインから解決。`role` は `HALL`／`PARTTIME` のみ許可、それ以外は400。重複メールは409） | FR-A03 |
 | ホーム画面メニュー | `GET /api/v1/app-features`（アクセストークン必須。呼び出し元のロールで表示可能な `app_feature` を `display_order` 順で返す。自テナントに店舗が1件も無ければ `requires_store = true` の項目は除外） | — |
 | ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
-| 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
+| 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days`、`GET/POST /api/v1/stores/{storeId}/tax-rates`・`DELETE .../tax-rates/{rateId}`（未適用の行のみ削除可。2026-09-18追補） | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
 | 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |

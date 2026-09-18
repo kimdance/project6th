@@ -11,6 +11,17 @@ import {
   type StoreCreateRequest,
   type StoreSettingsRequest,
 } from '../api/stores';
+import { fetchTaxRates, createTaxRate, deleteTaxRate, type TaxRate, type TaxCategory } from '../api/taxRates';
+
+const TAX_CATEGORY_LABELS: Record<TaxCategory, string> = {
+  STANDARD_10: '標準税率',
+  REDUCED_8: '軽減税率',
+};
+
+function todayStr(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 const TAX_ROUNDING_OPTIONS = [
   { value: 'FLOOR', label: '切り捨て' },
@@ -65,6 +76,13 @@ export const StoreSettingsPage: React.FC = () => {
 
   const [createForm, setCreateForm] = useState<StoreCreateRequest>(EMPTY_CREATE_FORM);
   const [settingsForm, setSettingsForm] = useState<StoreSettingsRequest>(EMPTY_SETTINGS_FORM);
+
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [newRateCategory, setNewRateCategory] = useState<TaxCategory>('STANDARD_10');
+  const [newRatePercent, setNewRatePercent] = useState(10);
+  const [newRateEffectiveFrom, setNewRateEffectiveFrom] = useState(todayStr());
+  const [taxRateSaving, setTaxRateSaving] = useState(false);
+  const [taxRateMessage, setTaxRateMessage] = useState('');
 
   const [messages, setMessages] = useState<string[]>([]);
   const [errorFields, setErrorFields] = useState<string[]>([]);
@@ -143,7 +161,47 @@ export const StoreSettingsPage: React.FC = () => {
       requireManagerApprovalForServeCancel: settings.requireManagerApprovalForServeCancel,
       requireManagerApprovalForVoidRefund: settings.requireManagerApprovalForVoidRefund,
     });
+    setTaxRates(await fetchTaxRates(storeId));
+    setNewRateCategory('STANDARD_10');
+    setNewRatePercent(10);
+    setNewRateEffectiveFrom(todayStr());
+    setTaxRateMessage('');
     setView('edit');
+  };
+
+  const submitNewTaxRate = async () => {
+    if (selectedStoreId === null) return;
+    setTaxRateMessage('');
+    setTaxRateSaving(true);
+    try {
+      const result = await createTaxRate(selectedStoreId, {
+        taxCategory: newRateCategory,
+        ratePercent: newRatePercent,
+        effectiveFrom: newRateEffectiveFrom,
+      });
+      if (!result.ok) {
+        setTaxRateMessage(result.errors.map((err) => err.message).join(' '));
+        return;
+      }
+      setTaxRates(await fetchTaxRates(selectedStoreId));
+      setNewRatePercent(10);
+    } catch (error) {
+      console.error('通信エラー:', error);
+      setTaxRateMessage('サーバーとの通信に失敗しました。');
+    } finally {
+      setTaxRateSaving(false);
+    }
+  };
+
+  const handleDeleteTaxRate = async (rateId: number) => {
+    if (selectedStoreId === null) return;
+    setTaxRateMessage('');
+    const result = await deleteTaxRate(selectedStoreId, rateId);
+    if (!result.ok) {
+      setTaxRateMessage(result.errors.map((err) => err.message).join(' '));
+      return;
+    }
+    setTaxRates(await fetchTaxRates(selectedStoreId));
   };
 
   const backToList = () => {
@@ -447,6 +505,105 @@ export const StoreSettingsPage: React.FC = () => {
                 style={getInputStyle('invoiceRegNo')}
               />
             </FormField>
+
+            <SectionHeading>税率</SectionHeading>
+            <p style={{ color: '#666', fontSize: '13px', marginTop: '-8px', marginBottom: '12px' }}>
+              「標準税率」「軽減税率」という区分は変わりません。実際のパーセンテージを、
+              いつから適用するかとあわせて登録します。終了日は無く、次の税率の適用開始日の
+              前日までが自動的にその税率の期間になります。
+            </p>
+            {(['STANDARD_10', 'REDUCED_8'] as const).map((category) => {
+              const history = taxRates.filter((r) => r.taxCategory === category);
+              return (
+                <div key={category} style={{ marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{TAX_CATEGORY_LABELS[category]}</div>
+                  {history.length === 0 && (
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      未設定（既定の{category === 'STANDARD_10' ? '10' : '8'}%を適用中）
+                    </div>
+                  )}
+                  {history.map((rate) => (
+                    <div
+                      key={rate.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '13px',
+                        padding: '4px 0',
+                      }}
+                    >
+                      <span style={{ color: rate.currentlyEffective ? '#000' : '#666' }}>
+                        {rate.ratePercent}%（{rate.effectiveFrom}〜{rate.currentlyEffective ? '・適用中' : ''}）
+                      </span>
+                      {!rate.currentlyEffective && new Date(rate.effectiveFrom) > new Date(todayStr()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTaxRate(rate.id)}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            backgroundColor: '#fff',
+                            color: '#dc3545',
+                            border: '1px solid #dc3545',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px 12px', marginBottom: '15px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <select
+                  value={newRateCategory}
+                  onChange={(e) => setNewRateCategory(e.target.value as TaxCategory)}
+                  style={{ flex: 1, padding: '8px' }}
+                >
+                  <option value="STANDARD_10">標準税率</option>
+                  <option value="REDUCED_8">軽減税率</option>
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newRatePercent}
+                  onChange={(e) => setNewRatePercent(Number(e.target.value))}
+                  style={{ flex: 1, padding: '8px', boxSizing: 'border-box' }}
+                  placeholder="税率（%）"
+                />
+                <input
+                  type="date"
+                  value={newRateEffectiveFrom}
+                  onChange={(e) => setNewRateEffectiveFrom(e.target.value)}
+                  style={{ flex: 1, padding: '8px', boxSizing: 'border-box' }}
+                />
+              </div>
+              {taxRateMessage && (
+                <p style={{ color: '#dc3545', fontSize: '13px', margin: '0 0 8px' }}>{taxRateMessage}</p>
+              )}
+              <button
+                type="button"
+                onClick={submitNewTaxRate}
+                disabled={taxRateSaving}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  backgroundColor: '#fff',
+                  color: '#007bff',
+                  border: '1px dashed #007bff',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                {taxRateSaving ? '処理中...' : '＋ 税率の変更を追加'}
+              </button>
+            </div>
+
             <SectionHeading>予約・キャンセルのルール</SectionHeading>
             <FormField label="Web予約の確定方式">
               <select
