@@ -172,7 +172,7 @@ export const FloorPage: React.FC = () => {
   const openOpenForm = async (table: DiningTable) => {
     resetMessages();
     setOpeningTable(table);
-    setOpenPartySize(table.seatCount > 0 ? table.seatCount : 1);
+    setOpenPartySize(table.seatType === 'COUNTER' ? 1 : 2);
     setOpenReservationId('');
     if (storeId !== null) {
       const list = await fetchReservations(storeId, todayStr(), 1);
