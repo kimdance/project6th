@@ -58,7 +58,7 @@ function formatTime(iso: string): string {
 type View = 'select-store' | 'board' | 'open' | 'order';
 
 /**
- * 卓・注文画面（FR-E01・E02・E03・E03b・E03c・E04・E07・FR-C07）。
+ * 注文管理（卓・注文）画面（FR-E01・E02・E03・E03b・E03c・E04・E07・FR-C07）。
  * 卓ボードで空席の卓をオープンし、卓ごとの注文入力・取消・作り直し・提供済み記録を行う。
  * 卓のクローズ（会計後）は会計・レジ（FR-G）の実装まで見送っている（04_architecture.md 追補参照）。
  */
@@ -321,7 +321,7 @@ export const FloorPage: React.FC = () => {
   if (stores.length === 0) {
     return (
       <div style={{ maxWidth: '480px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
-        <h2>卓・注文</h2>
+        <h2>注文管理</h2>
         <p style={{ color: '#666' }}>先に店舗設定から店舗を作成してください。</p>
       </div>
     );
@@ -329,7 +329,7 @@ export const FloorPage: React.FC = () => {
 
   return (
     <div style={{ maxWidth: '520px', margin: '40px auto', padding: '20px', textAlign: 'left' }}>
-      <h2>卓・注文</h2>
+      <h2>注文管理</h2>
       <TopMessage messages={messages} isError />
       <TopMessage messages={successMessage} isError={false} />
 

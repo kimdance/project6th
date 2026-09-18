@@ -39,6 +39,10 @@ public class AppFeature extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    /** ホーム画面での見出しグループ。MANAGEMENT（管理業務）／OPERATIONS（店舗営業）。 */
+    @Column(name = "group_key", nullable = false, length = 20)
+    private String groupKey = "MANAGEMENT";
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 

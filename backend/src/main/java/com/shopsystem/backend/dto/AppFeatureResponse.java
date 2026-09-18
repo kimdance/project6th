@@ -14,4 +14,6 @@ public class AppFeatureResponse {
     private String title;
     private String description;
     private String path;
+    /** ホーム画面での見出しグループ。MANAGEMENT（管理業務）／OPERATIONS（店舗営業）。 */
+    private String group;
 }

@@ -32,7 +32,8 @@ public class AppFeatureService {
 
         return appFeatureRepository.findVisibleForRole(ctx.role()).stream()
                 .filter(f -> hasStore || !f.isRequiresStore())
-                .map(f -> new AppFeatureResponse(f.getFeatureKey(), f.getTitle(), f.getDescription(), f.getPath()))
+                .map(f -> new AppFeatureResponse(
+                        f.getFeatureKey(), f.getTitle(), f.getDescription(), f.getPath(), f.getGroupKey()))
                 .toList();
     }
 }

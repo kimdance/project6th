@@ -1,11 +1,15 @@
 import { getTenantApiBaseUrl } from '../config';
 
+/** ホーム画面での見出しグループ。MANAGEMENT（管理業務）／OPERATIONS（店舗営業）。 */
+export type AppFeatureGroup = 'MANAGEMENT' | 'OPERATIONS';
+
 /** GET /api/v1/app-features の1件。ログイン中ユーザーのロールで表示可否が絞り込み済み。 */
 export interface AppFeature {
   key: string;
   title: string;
   description: string;
   path: string;
+  group: AppFeatureGroup;
 }
 
 /**

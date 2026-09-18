@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchMe, type Me } from '../api/session';
-import { fetchAppFeatures, type AppFeature } from '../api/appFeatures';
+import { fetchAppFeatures, type AppFeature, type AppFeatureGroup } from '../api/appFeatures';
+
+const GROUP_LABELS: Record<AppFeatureGroup, string> = {
+  MANAGEMENT: '管理業務',
+  OPERATIONS: '店舗営業',
+};
+const GROUP_ORDER: AppFeatureGroup[] = ['MANAGEMENT', 'OPERATIONS'];
 
 /**
  * ログイン後の共通トップ画面（04_architecture.md §6）。
@@ -55,33 +61,43 @@ export const Home = () => {
       <h2>ホーム</h2>
 
       {features.length > 0 ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: '16px',
-            marginTop: '24px',
-          }}
-        >
-          {features.map((feature) => (
-            <button
-              key={feature.key}
-              type="button"
-              onClick={() => navigate(feature.path)}
-              style={{
-                textAlign: 'left',
-                padding: '16px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                background: '#fff',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: '6px' }}>{feature.title}</div>
-              <div style={{ fontSize: '13px', color: '#666' }}>{feature.description}</div>
-            </button>
-          ))}
-        </div>
+        GROUP_ORDER.map((group) => {
+          const groupFeatures = features.filter((f) => f.group === group);
+          if (groupFeatures.length === 0) {
+            return null;
+          }
+          return (
+            <div key={group} style={{ marginTop: '24px' }}>
+              <h3 style={{ marginBottom: '12px' }}>{GROUP_LABELS[group]}</h3>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: '16px',
+                }}
+              >
+                {groupFeatures.map((feature) => (
+                  <button
+                    key={feature.key}
+                    type="button"
+                    onClick={() => navigate(feature.path)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '16px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      background: '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '6px' }}>{feature.title}</div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>{feature.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })
       ) : (
         <p style={{ color: '#666', marginTop: '24px' }}>現在ご利用いただける機能はありません。</p>
       )}
