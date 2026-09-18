@@ -383,7 +383,7 @@ export const FloorPage: React.FC = () => {
           {tables.length > 0 && (
             <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>席種類で絞り込み:</label>
+                <label style={{ display: 'block', marginBottom: '5px' }}>卓種類で絞り込み:</label>
                 <select
                   value={seatTypeFilter}
                   onChange={(e) => setSeatTypeFilter(e.target.value as SeatTypeFilter)}

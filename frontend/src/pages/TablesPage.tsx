@@ -262,7 +262,7 @@ export const TablesPage: React.FC = () => {
 
           <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>席種類で絞り込み:</label>
+              <label style={{ display: 'block', marginBottom: '5px' }}>卓種類で絞り込み:</label>
               <select
                 value={seatTypeFilter}
                 onChange={(e) => setSeatTypeFilter(e.target.value as SeatTypeFilter)}
@@ -380,7 +380,7 @@ export const TablesPage: React.FC = () => {
               style={getInputStyle('tableNo')}
             />
           </FormField>
-          <FormField label="席種類">
+          <FormField label="卓種類">
             <div style={{ marginTop: '5px', display: 'flex', gap: '16px' }}>
               {(['TABLE', 'COUNTER'] as const).map((seatType) => (
                 <label key={seatType} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
