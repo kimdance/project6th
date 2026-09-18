@@ -19,6 +19,7 @@ public final class AuditActions {
     public static final String RESERVATION_CHANGE = "RESERVATION_CHANGE";
     public static final String RESERVATION_CANCEL = "RESERVATION_CANCEL";
     public static final String MENU_CHANGE = "MENU_CHANGE";
+    public static final String ORDER_LINE_CANCEL_AFTER_SERVE = "ORDER_LINE_CANCEL_AFTER_SERVE";
 
     private AuditActions() {
     }

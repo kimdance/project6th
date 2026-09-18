@@ -43,6 +43,7 @@ const EMPTY_SETTINGS_FORM: StoreSettingsRequest = {
   webReservationMode: 'APPROVAL',
   cancelChargeDefaultCustomer: true,
   cancelChargeDefaultStore: false,
+  requireManagerApprovalForServeCancel: false,
 };
 
 type View = 'list' | 'create' | 'edit';
@@ -138,6 +139,7 @@ export const StoreSettingsPage: React.FC = () => {
       webReservationMode: settings.webReservationMode,
       cancelChargeDefaultCustomer: settings.cancelChargeDefaultCustomer,
       cancelChargeDefaultStore: settings.cancelChargeDefaultStore,
+      requireManagerApprovalForServeCancel: settings.requireManagerApprovalForServeCancel,
     });
     setView('edit');
   };
@@ -497,6 +499,25 @@ export const StoreSettingsPage: React.FC = () => {
                   ※但し、会計時にスタッフが個別のオーダーに対して請求する・請求しないを変更することができます。
                 </p>
               </div>
+            </FormField>
+            <FormField label="提供後の注文取消">
+              <label style={{ display: 'block' }}>
+                <input
+                  type="checkbox"
+                  checked={settingsForm.requireManagerApprovalForServeCancel}
+                  onChange={(e) =>
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      requireManagerApprovalForServeCancel: e.target.checked,
+                    }))
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                提供済みの品の取消は店長・経営管理者のみ行える（要店長承認）
+              </label>
+              <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
+                ※チェックを外すと、ホールスタッフも提供済みの品を取消できます（既定）。提供前の取消はこの設定に関わらず行えます。
+              </p>
             </FormField>
             <SubmitButton saving={saving} label="保存する" />
           </form>

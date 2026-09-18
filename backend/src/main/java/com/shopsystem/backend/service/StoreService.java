@@ -139,6 +139,7 @@ public class StoreService {
         setting.setWebReservationMode(webReservationMode.toUpperCase(Locale.ROOT));
         setting.setCancelChargeDefaultCustomer(req.isCancelChargeDefaultCustomer());
         setting.setCancelChargeDefaultStore(req.isCancelChargeDefaultStore());
+        setting.setRequireManagerApprovalForServeCancel(req.isRequireManagerApprovalForServeCancel());
         storeSettingRepository.save(setting);
 
         auditLogService.recordForCurrentUser(AuditActions.STORE_SETTING_CHANGE, storeId, "STORE", storeId,
@@ -158,7 +159,8 @@ public class StoreService {
                 + ", invoiceRegNo=" + setting.getInvoiceRegNo()
                 + ", webReservationMode=" + setting.getWebReservationMode()
                 + ", cancelChargeDefaultCustomer=" + setting.isCancelChargeDefaultCustomer()
-                + ", cancelChargeDefaultStore=" + setting.isCancelChargeDefaultStore();
+                + ", cancelChargeDefaultStore=" + setting.isCancelChargeDefaultStore()
+                + ", requireManagerApprovalForServeCancel=" + setting.isRequireManagerApprovalForServeCancel();
     }
 
     private StoreResponse toStoreResponse(Store store) {
@@ -173,7 +175,7 @@ public class StoreService {
                 store.getBusinessHours(), store.getSeatCount(),
                 setting.getTaxRounding(), setting.isPriceIncludesTax(), setting.getInvoiceRegNo(),
                 setting.getWebReservationMode(), setting.isCancelChargeDefaultCustomer(),
-                setting.isCancelChargeDefaultStore());
+                setting.isCancelChargeDefaultStore(), setting.isRequireManagerApprovalForServeCancel());
     }
 
     private ErrorItem err(String code, String field) {

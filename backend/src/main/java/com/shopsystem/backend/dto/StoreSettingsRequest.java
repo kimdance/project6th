@@ -25,4 +25,6 @@ public class StoreSettingsRequest {
     private boolean cancelChargeDefaultCustomer;
     /** 店都合キャンセルを既定で請求するか（FR-B08）。 */
     private boolean cancelChargeDefaultStore;
+    /** 提供後の注文明細の取消を店長承認必須にするか（FR-E03）。 */
+    private boolean requireManagerApprovalForServeCancel;
 }

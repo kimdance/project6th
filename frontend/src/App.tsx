@@ -10,6 +10,7 @@ import { StoreSettingsPage } from './pages/StoreSettingsPage';
 import { TablesPage } from './pages/TablesPage';
 import { MenuManagementPage } from './pages/MenuManagementPage';
 import { ReservationsPage } from './pages/ReservationsPage';
+import { FloorPage } from './pages/FloorPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { FeaturePlaceholder } from './pages/FeaturePlaceholder';
@@ -127,6 +128,16 @@ function App() {
               element={
                 <RequireAuth>
                   <MenuManagementPage />
+                </RequireAuth>
+              }
+            />
+
+            {/* 卓・注文（卓のオープン、注文の入力・取消・作り直し。FR-E01〜E04・E07・FR-C07） */}
+            <Route
+              path="/floor"
+              element={
+                <RequireAuth>
+                  <FloorPage />
                 </RequireAuth>
               }
             />

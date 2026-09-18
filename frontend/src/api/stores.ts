@@ -34,6 +34,8 @@ export interface StoreSettings {
   webReservationMode: string;
   cancelChargeDefaultCustomer: boolean;
   cancelChargeDefaultStore: boolean;
+  /** 提供後の注文明細の取消を店長承認必須にするか（FR-E03）。 */
+  requireManagerApprovalForServeCancel: boolean;
 }
 
 /** PUT の送信ボディ。フォームで扱いやすいよう、null は使わず空文字を許容する。 */
@@ -51,6 +53,7 @@ export interface StoreSettingsRequest {
   webReservationMode: string;
   cancelChargeDefaultCustomer: boolean;
   cancelChargeDefaultStore: boolean;
+  requireManagerApprovalForServeCancel: boolean;
 }
 
 /** 自テナントの店舗一覧。0件（未作成）または複数件。 */

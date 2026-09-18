@@ -394,6 +394,53 @@
     `status` フィールドのコメントが `ACTIVE / LOCKED / INVITED`（廃止済みの値を含む）のまま
     更新されていなかったため、実際の制約どおり `ACTIVE / LOCKED / RETIRED` に修正した。
     機能・APIへの影響は無い。
+  - 2026-09-18 追補（卓・注文の実装。FR-E01〜E04・E07・FR-C07）：標準業務フロー
+    （予約→来店・着席→注文→会計→締め）のうち、来店・着席と注文入力を実装した。
+    `table_session`／`table_session_table`／`customer_order`／`order_line`／`kitchen_ticket` は
+    `V1__init_schema.sql` の時点で作成済みだったが、アプリ層が未実装だったため実装した
+    （`V15__order_entry.sql` は店舗設定への列追加とホーム画面の入口追加のみ）。
+    - **卓のオープン（FR-E01・FR-C07）**：`POST /api/v1/stores/{storeId}/table-sessions`
+      （`diningTableId`・`partySize`・任意で `reservationId`）。対象卓が `EMPTY` であることを
+      確認し `table_session`（`OPEN`）を作成、`table_session_table` に1件（`is_primary=true`。
+      卓結合はFR-E06でフェーズ1未対応のため常に1件）を張り、`dining_table.status` を
+      `OCCUPIED` にする。`reservationId` 指定時は対象予約が `CONFIRMED` であることを確認し
+      `SEATED` へ遷移させる（03_domain_model.md §4.1）。一覧は
+      `GET /api/v1/stores/{storeId}/table-sessions`（`OPEN`／`BILLING` のみ。卓ボード表示用）、
+      詳細は `GET .../table-sessions/{sessionId}`（現在の注文明細一覧つき）。
+    - **注文の入力・数量変更・取消・作り直し（FR-E02・E03・E03b・E03c）**：
+      `POST .../table-sessions/{sessionId}/orders`（品目・数量・メモの配列。STAFF入力は
+      自動 `ACCEPTED`）、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更、
+      `PENDING` のみ）、`PATCH .../order-lines/{lineId}/cancel`（理由区分・調理済みか・請求可否を
+      記録。請求可否は省略時 `store_setting` の客都合／店都合の既定から自動算出）、
+      `POST .../order-lines/{lineId}/remake`（取消済み明細から新規明細を作成し
+      `remake_of_line_id` で関連付け）。権限は「卓のオープン／クローズ」「注文の入力・数量変更・
+      取消」の行どおり経営管理者・店長（自店）・ホール（自店）
+      （`StoreAccessGuard#requireCanManageFloor`）。**提供後（`SERVED`）の取消のみ**、店舗設定
+      「要店長承認」（`store_setting.require_manager_approval_for_serve_cancel`。新設。既定
+      `false`＝ホールも可）が有効なら経営管理者・店長に限定し
+      （`StoreAccessGuard#requireCanCancelServedLine`）、`audit_log`
+      （`ORDER_LINE_CANCEL_AFTER_SERVE`）に記録する（FR-J01）。提供前の取消は監査ログ対象外
+      （FR-J01の対象操作一覧どおり）。
+    - **提供済みの記録・キッチン連携（FR-E04・E07）**：注文送信時、調理が要る明細
+      （`menu_item.prep_type = COOK`）を1件でも含めば `kitchen_ticket`（`NEW`）を発行する。
+      専用のKDS画面（キッチンディスプレイ）はフェーズ1のこの実装では未作成のため、
+      `PATCH .../order-lines/{lineId}/serve` でホールが提供済みを記録する運用とし、対象注文の
+      全明細が終端状態（`SERVED`／`CANCELLED`／`REJECTED`）になった時点で `kitchen_ticket.status`
+      を `DONE` に更新する（04 §9 の判定ロジックを流用。`IN_PROGRESS` への遷移とKDS画面自体は
+      後続で追加する）。
+    - **あえて見送った範囲**：①**卓のクローズ（会計後）**：会計・レジ（FR-G）が未実装のため、
+      `table_session` は `OPEN` のままで `BILLING`／`CLOSED` への遷移は今回実装していない
+      （FR-G実装時に追加）。②**コース・ラストオーダー通知（FR-E05）**：コース管理（FR-B06。
+      S区分）自体が未実装のため見送った。`table_session.course_id`／`course_started_at`／
+      `last_order_at` は列のみ存在し常にnull。③**卓の結合・分割（FR-E06。S区分）**：
+      `table_session_table` は1セッション1卓のみで運用。④**オフライン注文（NFR-05・04 §9）**：
+      `staff_device` 登録・バッチ同期・スキュー補正・`fire_state`（HELD/FIRED）による後出し保留・
+      `prep_type` によるKDS振り分け等は、このエンティティ・APIではオンライン専用の簡易実装
+      （`fire_state` は常に既定 `FIRED`、`time_low_confidence` は常に `false`）とし、フェーズ1の
+      後続作業とする。⑤**モバイルオーダー（FR-F）**：`customer_order.source` はSTAFFのみを扱う。
+      実装したクラス：`TableSession`／`TableSessionTable`／`CustomerOrder`／`OrderLine`／
+      `KitchenTicket`（エンティティ）、`TableSessionService`／`OrderService`（サービス）、
+      `TableSessionController`／`OrderController`（コントローラー）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1340,7 +1387,7 @@ CREATE TABLE outbound_message (
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days` | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
-| 卓・注文 | `POST /api/v1/stores/{storeId}/table-sessions`、`POST .../{id}/orders`、`PATCH .../order-lines/{id}` | FR-E01〜E07 |
+| 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
 | 会計 | `POST /api/v1/table-sessions/{id}/checks`、`POST .../checks/{id}/payments`、`POST .../checks/{id}/finalize`、`POST .../checks/{id}/refunds` | FR-G01〜G12 |
 | 日次締め | `POST /api/v1/stores/{storeId}/daily-closes`、`GET .../sales-daily-reports` | FR-H01〜H05 |

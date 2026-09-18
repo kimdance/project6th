@@ -51,4 +51,8 @@ public class StoreSetting extends BaseEntity {
 
     @Column(name = "cancel_charge_default_store", nullable = false)
     private boolean cancelChargeDefaultStore = false;
+
+    /** 提供後の注文明細の取消（FR-E03）を店長承認必須にするか。既定falseはホールも取消可。 */
+    @Column(name = "require_manager_approval_for_serve_cancel", nullable = false)
+    private boolean requireManagerApprovalForServeCancel = false;
 }
