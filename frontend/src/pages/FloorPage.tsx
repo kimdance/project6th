@@ -701,7 +701,26 @@ export const FloorPage: React.FC = () => {
             {formatTime(detail.session.openedAt)}〜）
           </p>
 
-          <h3 style={{ marginTop: '24px' }}>現在の注文</h3>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '24px',
+            }}
+          >
+            <h3 style={{ margin: 0 }}>現在の注文</h3>
+            {hasBillableLines && (
+              <button
+                type="button"
+                onClick={openCheckout}
+                disabled={saving}
+                style={{ ...qtyButtonStyle, padding: '8px 16px' }}
+              >
+                会計処理へ
+              </button>
+            )}
+          </div>
           {detail.lines.length === 0 && <p style={{ color: '#666' }}>まだ注文がありません。</p>}
           {detail.lines.map((line) => (
             <div key={line.id} style={lineCardStyle(line.serveStatus)}>
@@ -848,12 +867,6 @@ export const FloorPage: React.FC = () => {
           {cart.length > 0 && (
             <button type="button" onClick={submitCart} disabled={saving} style={submitButtonStyle}>
               {saving ? '送信中...' : `注文を送信する（${cart.reduce((n, c) => n + c.quantity, 0)}点）`}
-            </button>
-          )}
-
-          {hasBillableLines && (
-            <button type="button" onClick={openCheckout} disabled={saving} style={submitButtonStyle}>
-              会計を始める
             </button>
           )}
 
