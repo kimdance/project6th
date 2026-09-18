@@ -375,20 +375,26 @@ export const FloorPage: React.FC = () => {
     }
   };
 
-  const openCheckout = async () => {
-    if (storeId === null || detail === null) return;
+  const openCheckout = async (sessionId?: number) => {
+    const targetSessionId = sessionId ?? detail?.session.id;
+    if (storeId === null || targetSessionId === undefined) return;
     resetMessages();
     setSaving(true);
     try {
-      const [methods, checks] = await Promise.all([
+      const needsDetail = detail === null || detail.session.id !== targetSessionId;
+      const [methods, checks, sessionDetail] = await Promise.all([
         fetchPaymentMethods(storeId),
-        fetchChecks(storeId, detail.session.id),
+        fetchChecks(storeId, targetSessionId),
+        needsDetail ? fetchTableSessionDetail(storeId, targetSessionId) : Promise.resolve(null),
       ]);
       setPaymentMethods(methods.filter((m) => m.enabled));
+      if (sessionDetail) {
+        setDetail(sessionDetail);
+      }
 
       let check = checks.find((c) => c.status === 'OPEN') ?? null;
       if (!check) {
-        const result = await createCheck(storeId, detail.session.id);
+        const result = await createCheck(storeId, targetSessionId);
         if (!result.ok) {
           setMessages(result.errors.map((e2) => e2.message));
           return;
@@ -622,28 +628,53 @@ export const FloorPage: React.FC = () => {
             const canOpen = table.status === 'EMPTY' && table.active;
             const clickable = canOperate(storeId) && (canOpen || session !== undefined);
             return (
-              <button
+              <div
                 key={table.id}
-                type="button"
-                disabled={!clickable}
-                onClick={() => (canOpen ? openOpenForm(table) : session && openSessionOrder(session.id))}
+                role="button"
+                tabIndex={clickable ? 0 : -1}
+                onClick={() => {
+                  if (!clickable) return;
+                  if (canOpen) {
+                    openOpenForm(table);
+                  } else if (session) {
+                    openSessionOrder(session.id);
+                  }
+                }}
                 style={{
                   ...boardButtonStyle(table.status === 'EMPTY' ? '#fff' : '#eef6ff'),
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   cursor: clickable ? 'pointer' : 'default',
                   opacity: table.active ? 1 : 0.6,
                 }}
               >
-                <div style={{ fontWeight: 600 }}>
-                  {table.tableNo}
-                  {table.area ? `（${table.area}）` : ''}
-                  {!table.active && '　[無効]'}
-                  　{SEAT_TYPE_LABELS[table.seatType]} ・ 席数 {table.seatCount}
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {table.tableNo}
+                    {table.area ? `（${table.area}）` : ''}
+                    {!table.active && '　[無効]'}
+                    　{SEAT_TYPE_LABELS[table.seatType]} ・ 席数 {table.seatCount}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666' }}>
+                    {TABLE_STATUS_LABELS[table.status] ?? table.status}
+                    {session ? ` ・ ${session.partySize}名 ・ ${formatTime(session.openedAt)}〜` : ''}
+                  </div>
                 </div>
-                <div style={{ fontSize: '13px', color: '#666' }}>
-                  {TABLE_STATUS_LABELS[table.status] ?? table.status}
-                  {session ? ` ・ ${session.partySize}名 ・ ${formatTime(session.openedAt)}〜` : ''}
-                </div>
-              </button>
+                {session && canOperate(storeId) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCheckout(session.id);
+                    }}
+                    disabled={saving}
+                    style={{ ...qtyButtonStyle, padding: '8px 12px', flexShrink: 0, marginLeft: '10px' }}
+                  >
+                    会計処理へ
+                  </button>
+                )}
+              </div>
             );
           })}
           {stores.length > 1 && (
