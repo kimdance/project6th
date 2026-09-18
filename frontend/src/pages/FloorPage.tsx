@@ -1319,12 +1319,21 @@ function boardButtonStyle(background: string): React.CSSProperties {
   };
 }
 
+const SERVE_STATUS_BACKGROUND_COLORS: Record<string, string> = {
+  PENDING: '#fff',
+  PREPARING: '#fff8e1',
+  SERVED: '#e8f5e9',
+  CANCELLED: '#f5f5f5',
+  REJECTED: '#fdecea',
+};
+
 function lineCardStyle(serveStatus: string): React.CSSProperties {
   return {
     border: '1px solid #ddd',
     borderRadius: '8px',
     padding: '10px 12px',
     marginBottom: '8px',
+    backgroundColor: SERVE_STATUS_BACKGROUND_COLORS[serveStatus] ?? '#fff',
     opacity: serveStatus === 'CANCELLED' || serveStatus === 'REJECTED' ? 0.6 : 1,
   };
 }
