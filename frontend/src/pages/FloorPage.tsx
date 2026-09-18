@@ -433,9 +433,9 @@ export const FloorPage: React.FC = () => {
                   {table.tableNo}
                   {table.area ? `（${table.area}）` : ''}
                   {!table.active && '　[無効]'}
+                  　{SEAT_TYPE_LABELS[table.seatType]} ・ 席数 {table.seatCount}
                 </div>
                 <div style={{ fontSize: '13px', color: '#666' }}>
-                  {SEAT_TYPE_LABELS[table.seatType]} ・ 席数 {table.seatCount} ・{' '}
                   {TABLE_STATUS_LABELS[table.status] ?? table.status}
                   {session ? ` ・ ${session.partySize}名 ・ ${formatTime(session.openedAt)}〜` : ''}
                 </div>
