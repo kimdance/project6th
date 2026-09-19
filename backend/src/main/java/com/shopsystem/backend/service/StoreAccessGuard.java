@@ -82,14 +82,16 @@ public class StoreAccessGuard {
     }
 
     /**
-     * 卓のオープン／クローズ、注文の入力・数量変更・取消（FR-E01〜E03）：経営管理者は全店、
-     * 店長・ホールは自分が所属する店舗（複数可）のみ（`02_requirements.md` §3.2）。
-     * キッチン・バイトは不可。{@link #requireCanManageReservations} と同じ権限セット。
+     * 卓のオープン／クローズ、注文の入力・数量変更・取消、会計の作成・確定・取消・返金・値引き
+     * （FR-E01〜E03、FR-G01〜）：経営管理者は全店、店長・ホール・キッチンは自分が所属する店舗
+     * （複数可）のみ（`02_requirements.md` §3.2。2026-09-19改訂：小規模店舗では同じスタッフが
+     * ホールとキッチンを兼ねる運用があるため、キッチンをホールと同じ権限セットにした）。
+     * バイトは不可。
      */
     public void requireCanManageFloor(Long storeId) {
         TenantContext.Data ctx = TenantContext.get();
         boolean allowed = "OWNER".equals(ctx.role())
-                || (("MANAGER".equals(ctx.role()) || "HALL".equals(ctx.role())) && ctx.storeIds().contains(storeId));
+                || (Set.of("MANAGER", "HALL", "KITCHEN").contains(ctx.role()) && ctx.storeIds().contains(storeId));
         if (!allowed) {
             throw forbidden();
         }
@@ -97,7 +99,7 @@ public class StoreAccessGuard {
 
     /**
      * 提供後の注文明細の取消（FR-E03）：店舗設定で「要店長承認」が有効な場合は経営管理者・
-     * 店長のみ、無効な場合は {@link #requireCanManageFloor} と同じ（ホールも可）。
+     * 店長のみ、無効な場合は {@link #requireCanManageFloor} と同じ（ホール・キッチンも可）。
      */
     public void requireCanCancelServedLine(Long storeId, boolean requireManagerApproval) {
         if (!requireManagerApproval) {
@@ -114,7 +116,7 @@ public class StoreAccessGuard {
 
     /**
      * 会計の取消・返金・値引き（FR-G10）：店舗設定で「要店長承認」が有効な場合は経営管理者・
-     * 店長のみ、無効な場合は {@link #requireCanManageFloor} と同じ（ホールも可）。
+     * 店長のみ、無効な場合は {@link #requireCanManageFloor} と同じ（ホール・キッチンも可）。
      */
     public void requireCanAdjustCheck(Long storeId, boolean requireManagerApproval) {
         if (!requireManagerApproval) {

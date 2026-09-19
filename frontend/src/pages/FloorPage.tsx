@@ -185,10 +185,12 @@ export const FloorPage: React.FC = () => {
     setSuccessMessage('');
   };
 
+  // 2026-09-19改訂：小規模店舗ではホールとキッチンを兼務するスタッフがいるため、
+  // 卓・注文・会計の操作権限はホールとキッチンで同じにしている（02_requirements.md §3.2）。
   const canOperate = (targetStoreId: number) =>
     !!me &&
     (me.role === 'OWNER' ||
-      ((me.role === 'MANAGER' || me.role === 'HALL') && me.stores.some((s) => s.id === targetStoreId)));
+      (['MANAGER', 'HALL', 'KITCHEN'].includes(me.role) && me.stores.some((s) => s.id === targetStoreId)));
 
   const selectStore = async (id: number) => {
     setStoreId(id);

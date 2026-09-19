@@ -655,6 +655,20 @@
     表示のみの変更（バックエンドは変更なし）。実機（デモテナント）で卓オープン→追加注文→注文送信
     まで確認し、2エリアが視覚的に区別できることと、既存の色分け・会計処理へのボタン等が壊れて
     いないことを確認した。
+  - 2026-09-19 追補（キッチンをホールと同じ権限に。小規模店舗対応）：`02_requirements.md` §3.2
+    権限マトリクスを改訂し、「注文管理」（卓のオープン／クローズ、注文の入力・数量変更・取消、
+    会計の作成・確定・取消・返金・値引き）に限りキッチンをホールと同じ権限にした。小規模店舗では
+    同じスタッフがホールとキッチンを兼務する運用があるため。バックエンドの権限チェックを一手に
+    担う `StoreAccessGuard#requireCanManageFloor`（`OrderService`／`TableSessionService`／
+    `CheckoutService` が共通で参照）の許可ロールに `KITCHEN` を追加し、`requireCanCancelServedLine`・
+    `requireCanAdjustCheck` も内部でこれに委譲しているため、提供後の取消・会計の取消／返金／値引き
+    （店舗設定の「要店長承認」が無効な場合）も含めて一括でホールと同じ扱いになった。フロントは
+    `FloorPage.tsx` の `canOperate` に `KITCHEN` を追加。ホーム画面に「注文管理」の入口を表示する
+    ため `app_feature_role` に `(floor, KITCHEN)` を追加（`V19__floor_kitchen_access.sql`）。
+    予約の登録・変更・キャンセル（`StoreAccessGuard#requireCanManageReservations`）とモバイル
+    オーダー注文の受理・却下は対象外とし、従来どおりキッチンは不可のまま変更していない。キッチン
+    向けの調理指示確認画面（キッチンディスプレイ／KDS、FR-E04）は本対応では実装せず見送った
+    （実装時はホールと同じ権限にする方針のみ `02_requirements.md` §3.2 ※3に記載）。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1601,9 +1615,9 @@ CREATE TABLE outbound_message (
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days`、`GET/POST /api/v1/stores/{storeId}/tax-rates`・`DELETE .../tax-rates/{rateId}`（未適用の行のみ削除可。2026-09-18追補） | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホールは自分の所属店舗を横断表示。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
 | メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
-| 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |
+| 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール・キッチン。2026-09-19追補でキッチンを追加）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
-| 会計 | `GET/POST /api/v1/stores/{storeId}/table-sessions/{sessionId}/checks`、`GET /api/v1/stores/{storeId}/checks/{checkId}`、`POST .../checks/{checkId}/discounts`、`POST .../checks/{checkId}/payments`（入金合計が達すると自動でFINALIZED。`finalize`単独APIは無し）、`POST .../checks/{checkId}/void`、`POST .../checks/{checkId}/refunds`。権限は`StoreAccessGuard#requireCanManageFloor`（確定まで）／`requireCanAdjustCheck`（値引き・取消・返金、要店長承認設定あり）。決済は全手段フェーズ1は手入力方式（2026-09-18追補） | FR-G01〜G05・G06・G07・G07b・G10・G11 |
+| 会計 | `GET/POST /api/v1/stores/{storeId}/table-sessions/{sessionId}/checks`、`GET /api/v1/stores/{storeId}/checks/{checkId}`、`POST .../checks/{checkId}/discounts`、`POST .../checks/{checkId}/payments`（入金合計が達すると自動でFINALIZED。`finalize`単独APIは無し）、`POST .../checks/{checkId}/void`、`POST .../checks/{checkId}/refunds`。権限は`StoreAccessGuard#requireCanManageFloor`（確定まで。経営管理者・店長・ホール・キッチン。2026-09-19追補でキッチンを追加）／`requireCanAdjustCheck`（値引き・取消・返金、要店長承認設定あり）。決済は全手段フェーズ1は手入力方式（2026-09-18追補） | FR-G01〜G05・G06・G07・G07b・G10・G11 |
 | 日次締め | `POST /api/v1/stores/{storeId}/daily-closes`、`GET .../sales-daily-reports` | FR-H01〜H05 |
 | シフト・勤怠 | `GET/POST /api/v1/stores/{storeId}/staff`、`.../shift-requests`、`.../shift-schedules`、`POST .../time-clocks` | FR-I01〜I06 |
 | 監査ログ | `GET /api/v1/audit-logs`（`?storeId=&action=&actor=&from=&to=&page=&size=`。テナントはJWTから解決するため、他APIと同様パスに `companyCode` は含めない。経営管理者は全店、店長は自店のみ閲覧可） | FR-J04 |
