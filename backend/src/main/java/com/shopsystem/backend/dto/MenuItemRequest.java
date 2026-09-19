@@ -20,4 +20,10 @@ public class MenuItemRequest {
     private LocalTime serveTimeTo;
     private int displayOrder;
     private boolean active = true;
+    /**
+     * ON_SALE / SOLD_OUT / SUSPENDED。フルの編集画面（更新時のみ）で「保存する」と同時に
+     * 販売状況もまとめて変更できるようにする（2026-09-19改訂）。新規登録時はこの値を使わず、
+     * 従来どおりサーバー側で決める（{@link com.shopsystem.backend.service.MenuService#createItem}）。
+     */
+    private String salesStatus;
 }

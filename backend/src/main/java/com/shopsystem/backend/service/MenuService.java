@@ -138,7 +138,7 @@ public class MenuService {
         Store store = accessGuard.requireStoreInTenant(storeId);
         accessGuard.requireCanEdit(storeId);
 
-        MenuCategory category = validateItem(storeId, req, null);
+        MenuCategory category = validateItem(storeId, req);
 
         MenuItem item = new MenuItem();
         item.setCompanyCode(TenantContext.get().companyCode());
@@ -159,6 +159,15 @@ public class MenuService {
         return toItemResponse(item);
     }
 
+    /**
+     * メニュー項目のフル編集（FR-D01）。2026-09-19改訂：以前は「有効／無効」の変更と
+     * 「販売状況」の変更が別の保存操作（本メソッドと {@link #updateSalesStatus}）に分かれており、
+     * 例えば「無効化と同時に提供停止にする」ために2回の保存が必要で分かりにくかった。この画面
+     * （フル編集）からの保存は、{@code req.getSalesStatus()} も含めて1回でまとめて検証・保存する
+     * ようにした。ホール・キッチンが素早く売り切れ・提供停止を切り替えるための
+     * {@link #updateSalesStatus}（一覧画面のワンタップ切替）は、フル編集の権限を持たないロール
+     * でも使える別経路として従来どおり残す。
+     */
     @Transactional
     public MenuItemResponse updateItem(Long storeId, Long itemId, MenuItemRequest req) {
         accessGuard.requireStoreInTenant(storeId);
@@ -168,15 +177,25 @@ public class MenuService {
                 .orElseThrow(accessGuard::notFound);
         String beforeSummary = summarizeItem(item);
 
-        MenuCategory category = validateItem(storeId, req, item.getSalesStatus());
+        MenuCategory category = validateItem(storeId, req);
+
+        List<ErrorItem> statusErrors = new ArrayList<>();
+        String salesStatus = req.getSalesStatus();
+        if (salesStatus == null || !VALID_SALES_STATUSES.contains(salesStatus)) {
+            statusErrors.add(err("menu.error.sales-status.invalid", "salesStatus"));
+        } else if (!"SUSPENDED".equals(salesStatus)) {
+            if (!req.isActive()) {
+                statusErrors.add(err("menu.error.sales-status.requires-active", "salesStatus"));
+            } else if (!category.isActive()) {
+                statusErrors.add(err("menu.error.sales-status.category-inactive", "salesStatus"));
+            }
+        }
+        if (!statusErrors.isEmpty()) {
+            throw new BusinessException(statusErrors);
+        }
 
         applyRequest(item, category, req);
-        if (!category.isActive() && !"SUSPENDED".equals(item.getSalesStatus())) {
-            // カテゴリ選択欄には無効なカテゴリも表示されるため、既存の有効な商品を無効カテゴリへ
-            // 付け替えることができてしまう。その場合も「無効カテゴリなら提供停止のみ」の不変
-            // 条件を保つため、ここで提供停止に補正する（updateCategoryの一括提供停止と対）。
-            item.setSalesStatus("SUSPENDED");
-        }
+        item.setSalesStatus(salesStatus);
         menuItemRepository.save(item);
 
         auditLogService.recordForCurrentUser(AuditActions.MENU_CHANGE, storeId, "MENU_ITEM", item.getId(),
@@ -199,12 +218,14 @@ public class MenuService {
     }
 
     /**
-     * 売り切れ・提供停止の切替（FR-D03）。メニュー項目自体が無効（{@code active == false}）な
-     * 場合、または所属カテゴリ（{@code menu_category}）が無効な場合は、提供停止以外への変更を
-     * 一切許さない（無効なメニュー・無効カテゴリ配下は事実上お客様に見えない前提のため）。
-     * 前者は {@link #validateItem} が課す「無効化する前に提供停止にしておく」制約の裏返しで、
-     * 先に {@link #updateItem} で有効化してから変更する。後者はカテゴリを再度有効化するか、
-     * カテゴリ側で配下メニューを一括提供停止にする {@link #updateCategory} の処理と対になる。
+     * 売り切れ・提供停止の切替（FR-D03）。一覧画面でのワンタップ切替用（フル編集の権限を
+     * 持たないホール・キッチンも使える。{@link StoreAccessGuard#requireCanToggleMenuStatus}）。
+     * メニュー項目自体が無効（{@code active == false}）な場合、または所属カテゴリ
+     * （{@code menu_category}）が無効な場合は、提供停止以外への変更を一切許さない（無効な
+     * メニュー・無効カテゴリ配下は事実上お客様に見えない前提のため）。有効化と同時に販売状況も
+     * 変えたい場合は、フル編集画面の保存（{@link #updateItem}）で1回にまとめて行える
+     * （2026-09-19改訂）。カテゴリが無効な場合はカテゴリを再度有効化するか、カテゴリ側で配下
+     * メニューを一括提供停止にする {@link #updateCategory} の処理と対になる。
      */
     @Transactional
     public MenuItemResponse updateSalesStatus(Long storeId, Long itemId, String salesStatus) {
@@ -265,17 +286,12 @@ public class MenuService {
 
     /**
      * フィールド検証とカテゴリの存在確認をまとめて行い、有効なカテゴリを返す。
-     * {@code currentSalesStatus} は更新対象の既存メニュー項目の現在の販売状況（新規登録時は
-     * {@code null}）。無効化する（{@code req.isActive() == false}）場合は、既にお客様へ提供
-     * されなくなっている状態にしてから畳む運用とするため、事前に「提供停止」へ切り替えておく
-     * ことを必須とする。新規登録時はこのチェックを行わない（登録直後は必ず販売中スタートで、
-     * 提供停止へ切り替える手段が登録前には無いため）。
+     * 2026-09-19改訂：以前はここで「無効化する前に提供停止にしておく」という旧来の2段階の
+     * 制約（呼び出し元から現在の販売状況を渡させていた）を課していたが撤廃した。有効／無効と
+     * 販売状況の整合は {@link #updateItem} が1回の保存でまとめて検証する。
      */
-    private MenuCategory validateItem(Long storeId, MenuItemRequest req, String currentSalesStatus) {
+    private MenuCategory validateItem(Long storeId, MenuItemRequest req) {
         List<ErrorItem> errors = new ArrayList<>();
-        if (!req.isActive() && currentSalesStatus != null && !"SUSPENDED".equals(currentSalesStatus)) {
-            errors.add(err("menu.error.sales-status.requires-active", "active"));
-        }
         if (trimToNull(req.getName()) == null) {
             errors.add(err("menu.error.item-name.required", "name"));
         }

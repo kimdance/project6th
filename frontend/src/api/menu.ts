@@ -50,6 +50,8 @@ export interface MenuItemRequest {
   serveTimeTo: string | null;
   displayOrder: number;
   active: boolean;
+  /** 更新時のみ使う（新規登録時はサーバー側で決める）。 */
+  salesStatus: SalesStatus;
 }
 
 export async function fetchMenuCategories(storeId: number): Promise<MenuCategory[]> {

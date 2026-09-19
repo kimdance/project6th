@@ -709,6 +709,27 @@
     `MenuManagementPage.tsx`の表示のみの変更（バックエンドは変更なし）。実機で検証用の店長
     アカウントを作成し、対象メニュー項目の「有効にする」のチェックを外した直後に「販売中に
     する」「売り切れにする」ボタンが消えることを確認した（検証用アカウントは確認後に削除）。
+  - 2026-09-19 追補（メニュー編集画面：「販売状況」の保存を「保存する」ボタンに一本化。
+    FR-D01・D03）：上記の不具合修正後も、メニュー編集画面には「販売状況」を即座にサーバーへ
+    保存するボタン（`SalesStatusButtons`。クリックした瞬間に`PATCH .../sales-status`を呼ぶ）と、
+    他のフィールドをまとめて保存する「保存する」ボタン（`PUT .../menu-items/{id}`）という、
+    2つの独立した保存操作が併存しており、「無効化と同時に提供停止にする」といった変更に
+    2回の保存が必要で分かりにくい、という指摘を受けた。`MenuItemRequest`に`salesStatus`
+    フィールドを追加し、`MenuService#updateItem`（`PUT`）で他のフィールドと同時にまとめて
+    検証・保存できるようにした（新規登録時はこのフィールドを使わず、従来どおりサーバー側で
+    決める）。不変条件（項目・カテゴリが無効なら提供停止以外は不可）は、以前は「保存前に
+    既に提供停止になっていること」を要求する2段階のチェック（`validateItem`）だったが、
+    「保存内容全体で無効かつ提供停止以外なら1回の保存でまとめて拒否する」方式に置き換え、
+    `updateSalesStatus`と同じ判定ロジック・エラーメッセージ（`menu.error.sales-status.*`）を
+    共有するようにした。フロントはメニュー編集画面の「販売状況」を、税区分・調理区分と同じ
+    ラジオボタン形式の通常のフォーム項目に変更し（`itemForm.salesStatus`。無効時は提供停止
+    以外を選択不可にする表示上の制御は既存の`canEnableSalesStatus`をそのまま流用）、「有効に
+    する」のチェックを外す・無効なカテゴリを選ぶと自動で「提供停止」に切り替えるようにした
+    （不要な保存エラーを避けるため）。一覧画面のワンタップ切替（`PATCH .../sales-status`。
+    フル編集の権限を持たないホール・キッチンも使える）は変更していない。実機で検証用の店長
+    アカウントを作成し、「販売中」への変更と「無効化」をそれぞれ「保存する」1回の操作で
+    同時に反映できることを確認した（検証用アカウントは確認後に削除）。バックエンドの既存
+    テスト65件は変更なし・全通過。
 - **関連文書**: `01_system_overview.md`、`02_requirements.md`、`03_domain_model.md`（本書は `03` 第7章の未決事項12件の解決と、物理スキーマ・API・実装方式の確定を行う）
 
 > 本書は `03_domain_model.md` が「`04` で確定する」とした論点（物理テーブル定義、テナント分離実装、
@@ -1654,7 +1675,7 @@ CREATE TABLE outbound_message (
 | ユーザー管理 | `GET /api/v1/users`（自テナントのユーザー一覧、経営管理者のみ）、`PUT /api/v1/users/{userId}`（ボディは `{ role, storeIds, status }`。`storeIds` は数値配列で空＝全店、1人が複数店舗を兼任可能。`status` は `ACTIVE`／`RETIRED` のみ指定可。経営管理者のみ、最後の1人の降格・退職は拒否） | FR-A03（登録画面で選べない役割・所属店舗の変更先）、退職（退会）処理 |
 | 店舗設定 | `GET /api/v1/stores`（自テナントの店舗一覧。複数店舗対応）、`POST /api/v1/stores`（新規店舗の追加、経営管理者のみ）、`GET/PUT /api/v1/stores/{storeId}/settings`、`.../tables`、`.../payment-methods`、`.../business-days`、`GET/POST /api/v1/stores/{storeId}/tax-rates`・`DELETE .../tax-rates/{rateId}`（未適用の行のみ削除可。2026-09-18追補） | FR-B01〜B09 |
 | 予約 | スタッフ台帳（ログイン必須。実装済み）：`GET /api/v1/reservations?storeId=&date=&days=`（日表示／週表示。`storeId`省略時は経営管理者は全店、店長・ホール・キッチンは自分の所属店舗を横断表示（2026-09-19追補でキッチンを追加）。2026-09-15追補で `/api/v1/stores/{storeId}/reservations` から変更）、`POST /api/v1/stores/{storeId}/reservations`、`PATCH .../{id}`、`PATCH .../{id}/status`（登録・変更は対象店舗が1つに定まるため従来どおり店舗配下）。Web予約（認証不要。2026-09-15追補で確定）：`GET /api/v1/public/stores`（自テナントの有効店舗一覧。店舗選択用）、`POST /api/v1/public/stores/{storeId}/reservations`（`storeId` は既存の `store.id` を使う。当初案の `{storeCode}` は未定義のまま置いていた仮の記法だったため撤回） | FR-C01〜C09 |
-| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止の切替のみ。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントに分離。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
+| メニュー | `GET/POST/PUT /api/v1/stores/{storeId}/menu-items`（`PUT`＝更新時は`salesStatus`も含めてフォームの内容を1回でまとめて保存する。2026-09-19追補）、`.../menu-categories`、`PATCH .../menu-items/{itemId}/sales-status`（売り切れ・提供停止のワンタップ切替専用。編集より広い権限〈ホール・キッチンも可〉のため別エンドポイントとして残す。2026-09-16追補）、`POST .../menu-items/photo`（写真アップロード。`multipart/form-data`の`file`、返り値`{ photoUrl }`をそのまま登録・更新リクエストへ渡す。2026-09-17追補）。期間限定メニュー（FR-D04）とオプション（FR-D05）は未実装 | FR-D01〜D03 |
 | 卓・注文 | `GET/POST /api/v1/stores/{storeId}/table-sessions`（一覧は`OPEN`／`BILLING`のみ）、`GET .../table-sessions/{sessionId}`（明細つき詳細）、`POST .../table-sessions/{sessionId}/orders`、`PATCH /api/v1/stores/{storeId}/order-lines/{lineId}`（数量・メモ変更）、`PATCH .../order-lines/{lineId}/cancel`、`POST .../order-lines/{lineId}/remake`、`PATCH .../order-lines/{lineId}/serve`。権限は`StoreAccessGuard#requireCanManageFloor`（経営管理者・店長・ホール・キッチン。2026-09-19追補でキッチンを追加。同追補で一覧・詳細のGETも含めて閲覧を同じ権限に統一し、それ以外のロールはURL直打ちでも閲覧不可にした）。卓のクローズ（会計後）はFR-G実装まで未対応（2026-09-18追補） | FR-E01〜E04・E07・FR-C07 |
 | モバイルオーダー | `GET /api/v1/mobile/{qrToken}/menu`、`POST /api/v1/mobile/{qrToken}/orders`、`GET /api/v1/mobile/{qrToken}/orders` | FR-F01〜F11 |
 | 会計 | `GET/POST /api/v1/stores/{storeId}/table-sessions/{sessionId}/checks`、`GET /api/v1/stores/{storeId}/checks/{checkId}`、`POST .../checks/{checkId}/discounts`、`POST .../checks/{checkId}/payments`（入金合計が達すると自動でFINALIZED。`finalize`単独APIは無し）、`POST .../checks/{checkId}/void`、`POST .../checks/{checkId}/refunds`。権限は`StoreAccessGuard#requireCanManageFloor`（確定・一覧・詳細取得まで。経営管理者・店長・ホール・キッチン。2026-09-19追補でキッチンを追加し、GETの閲覧も同じ権限に統一）／`requireCanAdjustCheck`（値引き・取消・返金、要店長承認設定あり）。決済は全手段フェーズ1は手入力方式（2026-09-18追補） | FR-G01〜G05・G06・G07・G07b・G10・G11 |

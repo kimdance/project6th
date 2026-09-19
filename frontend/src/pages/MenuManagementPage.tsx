@@ -71,6 +71,7 @@ const emptyItemForm = (categoryId: number): MenuItemRequest => ({
   serveTimeTo: null,
   displayOrder: 0,
   active: true,
+  salesStatus: 'ON_SALE',
 });
 
 type Tab = 'items' | 'categories';
@@ -315,6 +316,7 @@ export const MenuManagementPage: React.FC = () => {
       serveTimeTo: item.serveTimeTo ? item.serveTimeTo.slice(0, 5) : null,
       displayOrder: item.displayOrder,
       active: item.active,
+      salesStatus: item.salesStatus,
     });
     setTab('items');
     setView('form');
@@ -488,6 +490,9 @@ export const MenuManagementPage: React.FC = () => {
   const toggleable = selectedStoreId !== null && canToggleStatus(selectedStoreId);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  // フォーム未保存の入力値(itemForm)を基準に、販売状況を「提供停止」以外へ変更してよいか判定する
+  // （項目・カテゴリのどちらかが無効なら不可。MenuService#updateItemの検証と一致させる）。
+  const canEnableSalesStatus = itemForm.active && categoryById.get(itemForm.categoryId)?.active !== false;
   const filteredCategories = categories.filter((c) => matchesActiveFilter(categoryActiveFilter, c.active));
   const filteredItems = items
     .filter(
@@ -707,39 +712,45 @@ export const MenuManagementPage: React.FC = () => {
           {view === 'form' && tab === 'items' && (
             <form onSubmit={handleItemSubmit}>
               {editingItem && (
-                <div
-                  style={{
-                    marginBottom: '15px',
-                    padding: '10px 12px',
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    background: '#fafafa',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '8px',
-                    }}
-                  >
-                    <span style={{ fontSize: '13px', color: '#666' }}>販売状況</span>
-                    <SalesStatusBadge status={editingItem.salesStatus} />
+                <FormField label="販売状況">
+                  <div style={{ marginTop: '5px', display: 'flex', gap: '16px' }}>
+                    {(['ON_SALE', 'SOLD_OUT', 'SUSPENDED'] as const).map((s) => {
+                      const disabled = s !== 'SUSPENDED' && !canEnableSalesStatus;
+                      return (
+                        <label
+                          key={s}
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: disabled ? 0.5 : 1 }}
+                        >
+                          <input
+                            type="radio"
+                            name="salesStatus"
+                            checked={itemForm.salesStatus === s}
+                            disabled={disabled}
+                            onChange={() => setItemForm((prev) => ({ ...prev, salesStatus: s }))}
+                          />
+                          {SALES_STATUS_LABELS[s]}
+                        </label>
+                      );
+                    })}
                   </div>
-                  {itemErrors[editingItem.id] && <TopMessage messages={itemErrors[editingItem.id]} isError />}
-                  <SalesStatusButtons
-                    item={editingItem}
-                    onToggle={toggleStatus}
-                    canEnable={itemForm.active && categoryById.get(itemForm.categoryId)?.active !== false}
-                  />
-                </div>
+                  {!canEnableSalesStatus && (
+                    <p style={{ color: '#dc3545', fontSize: '13px', marginTop: '4px' }}>
+                      メニューが無効の場合、設定する販売状況は「提供停止」にしてください。
+                    </p>
+                  )}
+                </FormField>
               )}
               <FormField label="カテゴリ">
                 <select
                   value={itemForm.categoryId}
                   onChange={(e) => {
-                    setItemForm((prev) => ({ ...prev, categoryId: Number(e.target.value) }));
+                    const categoryId = Number(e.target.value);
+                    const categoryActive = categoryById.get(categoryId)?.active !== false;
+                    setItemForm((prev) => ({
+                      ...prev,
+                      categoryId,
+                      salesStatus: categoryActive ? prev.salesStatus : 'SUSPENDED',
+                    }));
                     clearFieldError('categoryId');
                   }}
                   style={getInputStyle('categoryId')}
@@ -907,7 +918,10 @@ export const MenuManagementPage: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={itemForm.active}
-                    onChange={(e) => setItemForm((prev) => ({ ...prev, active: e.target.checked }))}
+                    onChange={(e) => {
+                      const active = e.target.checked;
+                      setItemForm((prev) => ({ ...prev, active, salesStatus: active ? prev.salesStatus : 'SUSPENDED' }));
+                    }}
                     style={{ marginRight: '8px' }}
                   />
                   有効にする
