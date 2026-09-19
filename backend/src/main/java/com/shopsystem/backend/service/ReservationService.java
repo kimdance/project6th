@@ -50,15 +50,15 @@ public class ReservationService {
 
     /**
      * 予約の一覧（FR-C02）。{@code storeId} を指定すればその店舗のみ、省略時は横断表示：
-     * 経営管理者は自テナント全店舗、店長・ホールは自分が所属する店舗（複数可）を横断して返す
-     * （`AuditLogService#search` と同じ考え方）。
+     * 経営管理者は自テナント全店舗、店長・ホール・キッチンは自分が所属する店舗（複数可）を
+     * 横断して返す（`AuditLogService#search` と同じ考え方。2026-09-19改訂：キッチンを追加）。
      */
     @Transactional(readOnly = true)
     public List<ReservationResponse> list(Long storeId, LocalDateTime from, LocalDateTime to) {
         TenantContext.Data ctx = TenantContext.get();
         boolean isOwner = "OWNER".equals(ctx.role());
-        boolean isManagerOrHall = "MANAGER".equals(ctx.role()) || "HALL".equals(ctx.role());
-        if (!isOwner && !isManagerOrHall) {
+        boolean isManagerOrHallOrKitchen = Set.of("MANAGER", "HALL", "KITCHEN").contains(ctx.role());
+        if (!isOwner && !isManagerOrHallOrKitchen) {
             throw accessGuard.forbidden();
         }
 

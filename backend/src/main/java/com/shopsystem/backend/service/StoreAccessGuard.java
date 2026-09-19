@@ -55,13 +55,15 @@ public class StoreAccessGuard {
     }
 
     /**
-     * 予約の登録・変更・キャンセル（FR-C01）：経営管理者は全店、店長・ホールは自分が
-     * 所属する店舗（複数可）のみ（`02_requirements.md` §3.2）。キッチン・バイトは不可。
+     * 予約の登録・変更・キャンセル（FR-C01）：経営管理者は全店、店長・ホール・キッチンは
+     * 自分が所属する店舗（複数可）のみ（`02_requirements.md` §3.2。2026-09-19改訂：小規模
+     * 店舗では同じスタッフがホールとキッチンを兼ねる運用があるため、キッチンをホールと同じ
+     * 権限セットにした。{@link #requireCanManageFloor} と同じ権限セット）。バイトは不可。
      */
     public void requireCanManageReservations(Long storeId) {
         TenantContext.Data ctx = TenantContext.get();
         boolean allowed = "OWNER".equals(ctx.role())
-                || (("MANAGER".equals(ctx.role()) || "HALL".equals(ctx.role())) && ctx.storeIds().contains(storeId));
+                || (Set.of("MANAGER", "HALL", "KITCHEN").contains(ctx.role()) && ctx.storeIds().contains(storeId));
         if (!allowed) {
             throw forbidden();
         }

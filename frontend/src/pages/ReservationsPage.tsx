@@ -148,10 +148,12 @@ export const ReservationsPage: React.FC = () => {
     };
   }, [navigate]);
 
+  // 2026-09-19改訂：小規模店舗ではホールとキッチンを兼務するスタッフがいるため、
+  // 予約の操作権限はホールとキッチンで同じにしている（02_requirements.md §3.2）。
   const canEditStore = (storeId: number) =>
     !!me &&
     (me.role === 'OWNER' ||
-      ((me.role === 'MANAGER' || me.role === 'HALL') && me.stores.some((s) => s.id === storeId)));
+      (['MANAGER', 'HALL', 'KITCHEN'].includes(me.role) && me.stores.some((s) => s.id === storeId)));
 
   const reload = async (filter: StoreFilter, d: string, n: 1 | 7) => {
     setReservations(await fetchReservations(filter, d, n));
