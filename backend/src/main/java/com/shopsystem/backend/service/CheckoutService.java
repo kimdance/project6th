@@ -88,15 +88,21 @@ public class CheckoutService {
     private final StoreAccessGuard accessGuard;
     private final AuditLogService auditLogService;
 
+    /**
+     * 会計の閲覧権限は {@link StoreAccessGuard#requireCanManageFloor} と同じにする
+     * （2026-09-19改訂。卓・注文の中身と同様、「注文管理」を使えないロールはURLを直接
+     * 叩いても閲覧できないようにする）。
+     */
     public List<CheckResponse> listChecks(Long storeId, Long sessionId) {
-        accessGuard.requireCanView(storeId);
+        accessGuard.requireCanManageFloor(storeId);
         return guestCheckRepository.findAllByTableSession_IdOrderBySeqInSession(sessionId).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
+    /** 会計1件の閲覧権限は {@link #listChecks} と同じ（2026-09-19改訂）。 */
     public CheckResponse getCheck(Long storeId, Long checkId) {
-        accessGuard.requireCanView(storeId);
+        accessGuard.requireCanManageFloor(storeId);
         return toResponse(findCheck(storeId, checkId));
     }
 

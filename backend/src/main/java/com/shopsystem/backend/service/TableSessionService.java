@@ -47,16 +47,22 @@ public class TableSessionService {
     private final StoreAccessGuard accessGuard;
     private final AuditLogService auditLogService;
 
-    /** 営業中（OPEN／BILLING）の卓セッション一覧（卓・注文画面の卓ボード用）。 */
+    /**
+     * 営業中（OPEN／BILLING）の卓セッション一覧（卓・注文画面の卓ボード用）。閲覧も
+     * {@link StoreAccessGuard#requireCanManageFloor} と同じ権限にする（2026-09-19改訂）。
+     * 店舗設定等と違い、卓・注文の中身はテナント内なら誰でも見てよい情報ではないため、
+     * 「注文管理」を使えないロール（バイト等）はURLを直接叩いても閲覧できないようにする。
+     */
     public List<TableSessionResponse> listActive(Long storeId) {
-        accessGuard.requireCanView(storeId);
+        accessGuard.requireCanManageFloor(storeId);
         return tableSessionRepository.findAllByStore_IdAndStatusInOrderByOpenedAt(storeId, ACTIVE_STATUSES).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
+    /** 卓セッションの閲覧権限は {@link #listActive} と同じ（2026-09-19改訂）。 */
     public TableSessionResponse get(Long storeId, Long sessionId) {
-        accessGuard.requireCanView(storeId);
+        accessGuard.requireCanManageFloor(storeId);
         TableSession session = tableSessionRepository.findByIdAndStore_Id(sessionId, storeId)
                 .orElseThrow(accessGuard::notFound);
         return toResponse(session);
