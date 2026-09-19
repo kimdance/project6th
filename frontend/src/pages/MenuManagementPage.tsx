@@ -733,7 +733,7 @@ export const MenuManagementPage: React.FC = () => {
                       );
                     })}
                   </div>
-                  {!canEnableSalesStatus && (
+                  {!canEnableSalesStatus && itemForm.salesStatus !== 'SUSPENDED' && (
                     <p style={{ color: '#dc3545', fontSize: '13px', marginTop: '4px' }}>
                       メニューが無効の場合、設定する販売状況は「提供停止」にしてください。
                     </p>
