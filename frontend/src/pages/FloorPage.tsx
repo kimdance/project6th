@@ -740,252 +740,254 @@ export const FloorPage: React.FC = () => {
             {formatTime(detail.session.openedAt)}〜）
           </p>
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '24px',
-            }}
-          >
-            <h3 style={{ margin: 0 }}>現在の注文</h3>
-            {hasBillableLines && (
-              <button
-                type="button"
-                onClick={() => openCheckout()}
-                disabled={saving}
-                style={{ ...qtyButtonStyle, padding: '8px 16px' }}
+          <div style={currentOrderBoxStyle}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <h3 style={{ margin: 0 }}>現在の注文</h3>
+              {hasBillableLines && (
+                <button
+                  type="button"
+                  onClick={() => openCheckout()}
+                  disabled={saving}
+                  style={{ ...qtyButtonStyle, padding: '8px 16px' }}
+                >
+                  会計処理へ
+                </button>
+              )}
+            </div>
+            {detail.lines.length === 0 && <p style={{ color: '#666' }}>まだ注文がありません。</p>}
+            {detail.lines.length > 0 && (
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>注文状態で絞り込み:</label>
+                <select
+                  value={serveStatusFilter}
+                  onChange={(e) => setServeStatusFilter(e.target.value as ServeStatusFilter)}
+                  style={inputStyle}
+                >
+                  <option value="ALL">すべて</option>
+                  {(Object.keys(SERVE_STATUS_LABELS) as (keyof typeof SERVE_STATUS_LABELS)[]).map((status) => (
+                    <option key={status} value={status}>
+                      {SERVE_STATUS_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {detail.lines.length > 0 && visibleLines.length === 0 && (
+              <p style={{ color: '#666' }}>条件に一致する注文明細がありません。</p>
+            )}
+            {visibleLines.map((line) => (
+              <div key={line.id} style={lineCardStyle(line.serveStatus)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>
+                    {line.itemNameSnap} × {line.quantity}
+                  </strong>
+                  <span style={{ fontSize: '12px', color: '#666' }}>{SERVE_STATUS_LABELS[line.serveStatus]}</span>
+                </div>
+                {line.note && <div style={{ fontSize: '13px', color: '#666' }}>メモ: {line.note}</div>}
+                {line.serveStatus === 'CANCELLED' && (
+                  <div style={{ fontSize: '13px', color: '#666' }}>
+                    取消理由: {CANCEL_REASON_OPTIONS.find((o) => o.value === line.cancelReason)?.label ?? line.cancelReason}
+                  </div>
+                )}
+                <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
+                  {(line.serveStatus === 'PENDING' || line.serveStatus === 'PREPARING') && (
+                    <>
+                      <button type="button" onClick={() => handleServe(line)} style={lineActionStyle}>
+                        提供済みにする
+                      </button>
+                      <button type="button" onClick={() => openCancelDialog(line)} style={lineActionStyle}>
+                        取消する
+                      </button>
+                    </>
+                  )}
+                  {line.serveStatus === 'SERVED' && (
+                    <button type="button" onClick={() => openCancelDialog(line)} style={lineActionStyle}>
+                      取消する
+                    </button>
+                  )}
+                  {line.serveStatus === 'CANCELLED' && (
+                    <button type="button" onClick={() => handleRemake(line)} style={lineActionStyle}>
+                      作り直す
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {cancellingLine !== null && (
+              <form
+                onSubmit={submitCancel}
+                style={{ border: '1px solid #dc3545', borderRadius: '8px', padding: '12px', marginTop: '10px' }}
               >
-                会計処理へ
-              </button>
+                <p style={{ marginTop: 0 }}>
+                  「{cancellingLine.itemNameSnap}」を取消します。
+                  {cancellingLine.serveStatus === 'SERVED' && (
+                    <strong style={{ color: '#dc3545' }}> 提供済みの品の取消です。</strong>
+                  )}
+                </p>
+                <FormField label="取消理由">
+                  <select
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value as CancelReason)}
+                    style={inputStyle}
+                  >
+                    {CANCEL_REASON_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+                <label style={{ display: 'block', marginBottom: '12px' }}>
+                  <input
+                    type="checkbox"
+                    checked={wasCooked}
+                    onChange={(e) => setWasCooked(e.target.checked)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  調理済み（廃棄ロスになる）
+                </label>
+                <button type="submit" disabled={saving} style={submitButtonStyle}>
+                  {saving ? '処理中...' : '取消を確定する'}
+                </button>
+                <button type="button" onClick={() => setCancellingLine(null)} style={backButtonStyle}>
+                  キャンセル
+                </button>
+              </form>
             )}
           </div>
-          {detail.lines.length === 0 && <p style={{ color: '#666' }}>まだ注文がありません。</p>}
-          {detail.lines.length > 0 && (
+
+          <div style={additionalOrderBoxStyle}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <h3 style={{ margin: 0 }}>追加注文</h3>
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={submitCart}
+                  disabled={saving}
+                  style={{ ...qtyButtonStyle, padding: '8px 16px' }}
+                >
+                  {saving ? '送信中...' : `注文送信（${cart.reduce((n, c) => n + c.quantity, 0)}点）`}
+                </button>
+              )}
+            </div>
+            {cart.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                {cart.map((c) => {
+                  const item = menuItems.find((m) => m.id === c.menuItemId);
+                  if (!item) return null;
+                  return (
+                    <div
+                      key={c.menuItemId}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        border: '1px solid #007bff',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        marginBottom: '8px',
+                        backgroundColor: '#eef6ff',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ fontSize: '13px', color: '#666' }}>{item.priceJpy}円</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => changeCartQuantity(item.id, c.quantity - 1)}
+                          style={qtyButtonStyle}
+                        >
+                          −
+                        </button>
+                        <span>{c.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => changeCartQuantity(item.id, c.quantity + 1)}
+                          style={qtyButtonStyle}
+                        >
+                          ＋
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>注文状態で絞り込み:</label>
               <select
-                value={serveStatusFilter}
-                onChange={(e) => setServeStatusFilter(e.target.value as ServeStatusFilter)}
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
                 style={inputStyle}
               >
-                <option value="ALL">すべて</option>
-                {(Object.keys(SERVE_STATUS_LABELS) as (keyof typeof SERVE_STATUS_LABELS)[]).map((status) => (
-                  <option key={status} value={status}>
-                    {SERVE_STATUS_LABELS[status]}
+                <option value="ALL">すべてのカテゴリ</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
             </div>
-          )}
-          {detail.lines.length > 0 && visibleLines.length === 0 && (
-            <p style={{ color: '#666' }}>条件に一致する注文明細がありません。</p>
-          )}
-          {visibleLines.map((line) => (
-            <div key={line.id} style={lineCardStyle(line.serveStatus)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <strong>
-                  {line.itemNameSnap} × {line.quantity}
-                </strong>
-                <span style={{ fontSize: '12px', color: '#666' }}>{SERVE_STATUS_LABELS[line.serveStatus]}</span>
-              </div>
-              {line.note && <div style={{ fontSize: '13px', color: '#666' }}>メモ: {line.note}</div>}
-              {line.serveStatus === 'CANCELLED' && (
-                <div style={{ fontSize: '13px', color: '#666' }}>
-                  取消理由: {CANCEL_REASON_OPTIONS.find((o) => o.value === line.cancelReason)?.label ?? line.cancelReason}
-                </div>
-              )}
-              <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
-                {(line.serveStatus === 'PENDING' || line.serveStatus === 'PREPARING') && (
-                  <>
-                    <button type="button" onClick={() => handleServe(line)} style={lineActionStyle}>
-                      提供済みにする
-                    </button>
-                    <button type="button" onClick={() => openCancelDialog(line)} style={lineActionStyle}>
-                      取消する
-                    </button>
-                  </>
-                )}
-                {line.serveStatus === 'SERVED' && (
-                  <button type="button" onClick={() => openCancelDialog(line)} style={lineActionStyle}>
-                    取消する
-                  </button>
-                )}
-                {line.serveStatus === 'CANCELLED' && (
-                  <button type="button" onClick={() => handleRemake(line)} style={lineActionStyle}>
-                    作り直す
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {cancellingLine !== null && (
-            <form
-              onSubmit={submitCancel}
-              style={{ border: '1px solid #dc3545', borderRadius: '8px', padding: '12px', marginTop: '10px' }}
-            >
-              <p style={{ marginTop: 0 }}>
-                「{cancellingLine.itemNameSnap}」を取消します。
-                {cancellingLine.serveStatus === 'SERVED' && (
-                  <strong style={{ color: '#dc3545' }}> 提供済みの品の取消です。</strong>
-                )}
-              </p>
-              <FormField label="取消理由">
-                <select
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value as CancelReason)}
-                  style={inputStyle}
+            {visibleMenuItems.map((item) => {
+              const inCart = cart.find((c) => c.menuItemId === item.id);
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    marginBottom: '8px',
+                  }}
                 >
-                  {CANCEL_REASON_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-              <label style={{ display: 'block', marginBottom: '12px' }}>
-                <input
-                  type="checkbox"
-                  checked={wasCooked}
-                  onChange={(e) => setWasCooked(e.target.checked)}
-                  style={{ marginRight: '8px' }}
-                />
-                調理済み（廃棄ロスになる）
-              </label>
-              <button type="submit" disabled={saving} style={submitButtonStyle}>
-                {saving ? '処理中...' : '取消を確定する'}
-              </button>
-              <button type="button" onClick={() => setCancellingLine(null)} style={backButtonStyle}>
-                キャンセル
-              </button>
-            </form>
-          )}
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '24px',
-            }}
-          >
-            <h3 style={{ margin: 0 }}>追加注文</h3>
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={submitCart}
-                disabled={saving}
-                style={{ ...qtyButtonStyle, padding: '8px 16px' }}
-              >
-                {saving ? '送信中...' : `注文送信（${cart.reduce((n, c) => n + c.quantity, 0)}点）`}
-              </button>
-            )}
-          </div>
-          {cart.length > 0 && (
-            <div style={{ marginBottom: '15px' }}>
-              {cart.map((c) => {
-                const item = menuItems.find((m) => m.id === c.menuItemId);
-                if (!item) return null;
-                return (
-                  <div
-                    key={c.menuItemId}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      border: '1px solid #007bff',
-                      borderRadius: '8px',
-                      padding: '10px 12px',
-                      marginBottom: '8px',
-                      backgroundColor: '#eef6ff',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{item.name}</div>
-                      <div style={{ fontSize: '13px', color: '#666' }}>{item.priceJpy}円</div>
-                    </div>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>{item.priceJpy}円</div>
+                  </div>
+                  {inCart ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
                         type="button"
-                        onClick={() => changeCartQuantity(item.id, c.quantity - 1)}
+                        onClick={() => changeCartQuantity(item.id, inCart.quantity - 1)}
                         style={qtyButtonStyle}
                       >
                         −
                       </button>
-                      <span>{c.quantity}</span>
+                      <span>{inCart.quantity}</span>
                       <button
                         type="button"
-                        onClick={() => changeCartQuantity(item.id, c.quantity + 1)}
+                        onClick={() => changeCartQuantity(item.id, inCart.quantity + 1)}
                         style={qtyButtonStyle}
                       >
                         ＋
                       </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div style={{ marginBottom: '10px' }}>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
-              style={inputStyle}
-            >
-              <option value="ALL">すべてのカテゴリ</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {visibleMenuItems.map((item) => {
-            const inCart = cart.find((c) => c.menuItemId === item.id);
-            return (
-              <div
-                key={item.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                  marginBottom: '8px',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{item.name}</div>
-                  <div style={{ fontSize: '13px', color: '#666' }}>{item.priceJpy}円</div>
+                  ) : (
+                    <button type="button" onClick={() => addToCart(item)} style={qtyButtonStyle}>
+                      追加
+                    </button>
+                  )}
                 </div>
-                {inCart ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => changeCartQuantity(item.id, inCart.quantity - 1)}
-                      style={qtyButtonStyle}
-                    >
-                      −
-                    </button>
-                    <span>{inCart.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => changeCartQuantity(item.id, inCart.quantity + 1)}
-                      style={qtyButtonStyle}
-                    >
-                      ＋
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => addToCart(item)} style={qtyButtonStyle}>
-                    追加
-                  </button>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
 
           <button type="button" onClick={() => setView('board')} style={backButtonStyle}>
             ← 卓一覧に戻る
@@ -1304,6 +1306,22 @@ const sectionBoxStyle: React.CSSProperties = {
   borderRadius: '8px',
   padding: '12px',
   marginTop: '16px',
+};
+
+const currentOrderBoxStyle: React.CSSProperties = {
+  border: '1px solid #ccc',
+  borderRadius: '8px',
+  padding: '16px',
+  marginTop: '24px',
+  backgroundColor: '#f5f5f5',
+};
+
+const additionalOrderBoxStyle: React.CSSProperties = {
+  border: '1px solid #99c7ff',
+  borderRadius: '8px',
+  padding: '16px',
+  marginTop: '24px',
+  backgroundColor: '#f4f9ff',
 };
 
 function boardButtonStyle(background: string): React.CSSProperties {
