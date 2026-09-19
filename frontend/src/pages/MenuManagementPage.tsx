@@ -728,7 +728,11 @@ export const MenuManagementPage: React.FC = () => {
                     <SalesStatusBadge status={editingItem.salesStatus} />
                   </div>
                   {itemErrors[editingItem.id] && <TopMessage messages={itemErrors[editingItem.id]} isError />}
-                  <SalesStatusButtons item={editingItem} onToggle={toggleStatus} />
+                  <SalesStatusButtons
+                    item={editingItem}
+                    onToggle={toggleStatus}
+                    canEnable={itemForm.active && categoryById.get(itemForm.categoryId)?.active !== false}
+                  />
                 </div>
               )}
               <FormField label="カテゴリ">
@@ -975,7 +979,7 @@ const ItemList: React.FC<{
         </div>
         {toggleable && (
           <div style={{ marginTop: '10px' }}>
-            <SalesStatusButtons item={item} onToggle={onToggle} />
+            <SalesStatusButtons item={item} onToggle={onToggle} canEnable={item.active && !categoryInactive} />
           </div>
         )}
       </div>
@@ -1021,13 +1025,16 @@ const SalesStatusBadge: React.FC<{ status: SalesStatus }> = ({ status }) => (
   </span>
 );
 
-const SalesStatusButtons: React.FC<{ item: MenuItem; onToggle: (item: MenuItem, nextStatus: SalesStatus) => void }> = ({
-  item,
-  onToggle,
-}) => (
+const SalesStatusButtons: React.FC<{
+  item: MenuItem;
+  onToggle: (item: MenuItem, nextStatus: SalesStatus) => void;
+  /** メニュー項目・所属カテゴリが無効なら、提供停止以外への変更ボタンは出さない（バックエンドの不変条件と一致させる）。 */
+  canEnable: boolean;
+}> = ({ item, onToggle, canEnable }) => (
   <div style={{ display: 'flex', gap: '8px' }}>
     {(['ON_SALE', 'SOLD_OUT', 'SUSPENDED'] as const)
       .filter((s) => s !== item.salesStatus)
+      .filter((s) => canEnable || s === 'SUSPENDED')
       .map((s) => (
         <button
           key={s}
